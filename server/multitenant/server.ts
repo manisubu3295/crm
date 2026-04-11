@@ -32,6 +32,7 @@ import batchesRouter      from "./routes/batches.js";
 import targetsRouter      from "./routes/targets.js";
 import quotationsRouter   from "./routes/quotations.js";
 import attendanceRouter   from "./routes/attendance.js";
+import demosRouter        from "./routes/demos.js";
 
 export function createApp(): {
   app: Express;
@@ -80,6 +81,7 @@ export function createApp(): {
   app.use("/api/targets",      targetsRouter);
   app.use("/api/quotations",   quotationsRouter);
   app.use("/api/attendance",   attendanceRouter);
+  app.use("/api/demos",        demosRouter);
 
   // Dev tools — only available in development
   if (env.NODE_ENV === "development") {

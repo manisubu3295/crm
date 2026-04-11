@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Phone, Mail, MapPin, Pencil, Send, CheckSquare, Clock, ChevronDown, AlertTriangle, Save } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Pencil, Send, CheckSquare, Clock, ChevronDown, AlertTriangle, Save, CalendarPlus, Video, MapPin as LocationIcon } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
 import { Button } from "../components/ui/button.js";
@@ -8,12 +8,14 @@ import { Badge } from "../components/ui/badge.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog.js";
 import { Input } from "../components/ui/input.js";
+import { Label } from "../components/ui/label.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select.js";
 import { useLead, useUpdateLeadStage } from "../hooks/useLeads.js";
 import { useCreateTask } from "../hooks/useFollowUps.js";
 import { apiRequest } from "../lib/queryClient.js";
-import { STAGE_COLORS, STAGE_LABELS, STAGE_COLORS as SC, formatDateTime, timeAgo, getScoreLabel } from "../lib/utils.js";
+import { STAGE_COLORS, STAGE_LABELS, formatDateTime, timeAgo, getScoreLabel } from "../lib/utils.js";
 import { useForm } from "react-hook-form";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const STAGES = ["new","contacted","qualified","demo","interested","payment","admitted","lost"];
 const CHANNEL_ICONS: Record<string, string> = {
@@ -33,6 +35,7 @@ export function LeadDetailPage() {
   const [showSend,  setShowSend]  = useState(false);
   const [showTask,  setShowTask]  = useState(false);
   const [showStage, setShowStage] = useState(false);
+  const [showDemo,  setShowDemo]  = useState(false);
 
   if (isLoading) return <AppShell title="Lead Detail"><p className="text-gray-500">Loading…</p></AppShell>;
   const lead = data?.data;
@@ -79,6 +82,9 @@ export function LeadDetailPage() {
               </div>
             )}
           </div>
+          <Button variant="outline" size="sm" onClick={() => setShowDemo(true)}>
+            <CalendarPlus className="h-4 w-4" /> Schedule Demo
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowSend(true)}>
             <Send className="h-4 w-4" /> Message
           </Button>
@@ -144,6 +150,9 @@ export function LeadDetailPage() {
 
         {/* Right — Timeline */}
         <div className="space-y-4 lg:col-span-2">
+          {/* Demo Sessions */}
+          <DemoSessionsCard leadId={id} />
+
           {/* Pending Tasks */}
           {lead.tasks?.filter((t: any) => t.status !== "done" && t.status !== "cancelled").length > 0 && (
             <Card>
@@ -185,6 +194,9 @@ export function LeadDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Schedule Demo Dialog */}
+      <ScheduleDemoDialog open={showDemo} onClose={() => setShowDemo(false)} leadId={id} />
 
       {/* Send Message Dialog */}
       <SendMessageDialog open={showSend} onClose={() => setShowSend(false)} leadId={id} />
@@ -421,6 +433,187 @@ function AddTaskDialog({ open, onClose, leadId, assignedTo }: { open: boolean; o
             <Button type="submit" disabled={createTask.isPending}>Create Task</Button>
           </div>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Demo Sessions Card ───────────────────────────────────────
+const DEMO_STATUS_COLORS: Record<string, string> = {
+  scheduled:  "bg-blue-100 text-blue-700",
+  completed:  "bg-green-100 text-green-700",
+  no_show:    "bg-red-100 text-red-700",
+  cancelled:  "bg-gray-100 text-gray-500",
+};
+const OUTCOME_COLORS: Record<string, string> = {
+  interested:     "bg-emerald-100 text-emerald-700",
+  enrolled:       "bg-purple-100 text-purple-700",
+  not_interested: "bg-red-100 text-red-700",
+  follow_up:      "bg-amber-100 text-amber-700",
+};
+
+function DemoSessionsCard({ leadId }: { leadId: string }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ["demos", leadId],
+    queryFn: () => apiRequest<any>("GET", `/api/demos?leadId=${leadId}`),
+    staleTime: 30_000,
+  });
+  const demos: any[] = data?.data ?? [];
+
+  const updateDemo = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      apiRequest<any>("PATCH", `/api/demos/${id}`, body),
+    onSuccess: () => {
+      toast.success("Demo updated");
+      qc.invalidateQueries({ queryKey: ["demos", leadId] });
+    },
+    onError: () => toast.error("Failed to update demo"),
+  });
+
+  if (demos.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-center gap-2">
+        <CalendarPlus className="h-4 w-4 text-blue-500" />
+        <CardTitle className="text-sm">Demo Sessions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {demos.map((d: any) => (
+          <div key={d.id} className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${DEMO_STATUS_COLORS[d.status] ?? ""}`}>
+                    {d.status}
+                  </span>
+                  {d.outcome && (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${OUTCOME_COLORS[d.outcome] ?? ""}`}>
+                      {d.outcome.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-700 font-medium">
+                  {new Date(d.scheduled_at).toLocaleString("en-IN", {
+                    day: "2-digit", month: "short", year: "numeric",
+                    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
+                  })}
+                  {" · "}{d.duration_min} min
+                </p>
+                <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+                  {d.mode === "online" ? <Video className="h-3 w-3" /> : <LocationIcon className="h-3 w-3" />}
+                  <span>{d.mode}{d.location ? ` — ${d.location}` : ""}</span>
+                </div>
+                {d.trainer_name && <p className="text-[10px] text-gray-400 mt-0.5">Trainer: {d.trainer_name}</p>}
+              </div>
+              {d.status === "scheduled" && (
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button onClick={() => updateDemo.mutate({ id: d.id, body: { status: "completed" } })}
+                    className="text-[10px] px-2 py-0.5 rounded border border-green-300 text-green-700 hover:bg-green-50">
+                    Mark Attended
+                  </button>
+                  <button onClick={() => updateDemo.mutate({ id: d.id, body: { status: "no_show" } })}
+                    className="text-[10px] px-2 py-0.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
+                    No Show
+                  </button>
+                </div>
+              )}
+            </div>
+            {d.status === "completed" && !d.outcome && (
+              <div className="flex gap-1 flex-wrap">
+                {["interested","enrolled","not_interested","follow_up"].map((o) => (
+                  <button key={o} onClick={() => updateDemo.mutate({ id: d.id, body: { outcome: o } })}
+                    className="text-[10px] px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-50 capitalize">
+                    {o.replace(/_/g," ")}
+                  </button>
+                ))}
+              </div>
+            )}
+            {d.notes && <p className="text-xs text-gray-500 italic">{d.notes}</p>}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Schedule Demo Dialog ─────────────────────────────────────
+function ScheduleDemoDialog({ open, onClose, leadId }: { open: boolean; onClose: () => void; leadId: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    scheduled_at: "", duration_min: "60", mode: "offline", location: "", notes: "",
+  });
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const mutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => apiRequest<any>("POST", "/api/demos", body),
+    onSuccess: () => {
+      toast.success("Demo scheduled — WhatsApp reminders queued (24h + 1h before)");
+      qc.invalidateQueries({ queryKey: ["demos", leadId] });
+      qc.invalidateQueries({ queryKey: ["lead", leadId] });
+      onClose();
+    },
+    onError: () => toast.error("Failed to schedule demo"),
+  });
+
+  const handleSave = () => {
+    if (!form.scheduled_at) { toast.error("Select date and time"); return; }
+    mutation.mutate({
+      lead_id: leadId,
+      scheduled_at: form.scheduled_at,
+      duration_min: parseInt(form.duration_min),
+      mode: form.mode,
+      location: form.location || null,
+      notes: form.notes || null,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Schedule Demo Session</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Date & Time *</Label>
+              <Input type="datetime-local" className="mt-1" value={form.scheduled_at}
+                onChange={(e) => set("scheduled_at", e.target.value)} />
+            </div>
+            <div>
+              <Label>Duration (min)</Label>
+              <Input type="number" min="15" step="15" className="mt-1" value={form.duration_min}
+                onChange={(e) => set("duration_min", e.target.value)} />
+            </div>
+            <div>
+              <Label>Mode</Label>
+              <Select value={form.mode} onValueChange={(v) => set("mode", v)}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="offline">In-person</SelectItem>
+                  <SelectItem value="online">Online</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label>{form.mode === "online" ? "Meeting Link" : "Room / Location"}</Label>
+              <Input className="mt-1" value={form.location}
+                onChange={(e) => set("location", e.target.value)}
+                placeholder={form.mode === "online" ? "https://meet.google.com/..." : "Room 101, Ground Floor"} />
+            </div>
+            <div className="col-span-2">
+              <Label>Notes</Label>
+              <Input className="mt-1" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">WhatsApp reminders will be sent 24h and 1h before the session.</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={mutation.isPending}>
+              {mutation.isPending ? "Scheduling…" : "Schedule Demo"}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

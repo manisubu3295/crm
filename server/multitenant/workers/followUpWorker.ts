@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { getRedisConnection } from "../queues/index.js";
 import { getPool } from "../tenant/dbPool.js";
 import { notificationService } from "../services/notificationService.js";
+import { whatsappService } from "../services/whatsappService.js";
 import { emitToTenant } from "../lib/socketEmitter.js";
 import logger from "../logger.js";
 
@@ -9,6 +10,35 @@ export function startFollowUpWorker() {
   const worker = new Worker(
     "crm-followup",
     async (job) => {
+      // ── Demo reminder branch ─────────────────────────────────
+      if (job.name === "demo-reminder") {
+        const { leadName, leadPhone, scheduledAt, mode, location, tenantId, demoId } =
+          job.data as { leadName: string; leadPhone: string; scheduledAt: string; mode: string; location?: string; tenantId: string; demoId: string };
+
+        if (!leadPhone) return;
+
+        const demoDate = new Date(scheduledAt);
+        const timeStr  = demoDate.toLocaleString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric",
+          hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata",
+        });
+
+        const locText = location ? ` at ${location}` : "";
+        const modeText = mode === "online" ? "online" : "in person";
+        const msg =
+          `Hi ${leadName}, this is a reminder for your demo session ${modeText}${locText} scheduled at ${timeStr}. ` +
+          `Please be on time. Looking forward to meeting you! Reply STOP to cancel.`;
+
+        try {
+          await whatsappService.sendText(leadPhone, msg);
+          logger.info({ demoId, leadPhone, tenantId }, "Demo reminder WhatsApp sent");
+        } catch (err) {
+          logger.warn({ demoId, leadPhone, err }, "Demo reminder WhatsApp failed");
+        }
+        return;
+      }
+
+      // ── Task follow-up reminder branch ───────────────────────
       const { taskId, tenantId } = job.data as { taskId: string; tenantId: string };
       const db = await getPool(tenantId);
 
