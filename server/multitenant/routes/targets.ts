@@ -91,17 +91,17 @@ router.get("/", ...guard, async (req: TenantRequest, res) => {
 
 // ─── POST /api/targets (upsert) ───────────────────────────────
 router.post("/", ...guard, async (req: TenantRequest, res) => {
-  const { user_id, month, year, revenue_target, admission_target } = req.body as Record<string, unknown>;
+  const { user_id, month, year, revenue_target, admission_target, calls_target } = req.body as Record<string, unknown>;
   if (!user_id || !month || !year) {
     res.status(400).json({ ok: false, message: "user_id, month and year required" }); return;
   }
   const row = await req.db.query(
-    `INSERT INTO counsellor_targets (user_id,month,year,revenue_target,admission_target)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO counsellor_targets (user_id,month,year,revenue_target,admission_target,calls_target)
+     VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (user_id,month,year) DO UPDATE
-       SET revenue_target=$4, admission_target=$5, updated_at=now()
+       SET revenue_target=$4, admission_target=$5, calls_target=$6, updated_at=now()
      RETURNING *`,
-    [user_id, month, year, revenue_target ?? 0, admission_target ?? 0]
+    [user_id, month, year, revenue_target ?? 0, admission_target ?? 0, calls_target ?? 0]
   );
   res.json({ ok: true, data: row.rows[0] });
 });

@@ -34,6 +34,7 @@ import quotationsRouter   from "./routes/quotations.js";
 import attendanceRouter   from "./routes/attendance.js";
 import demosRouter        from "./routes/demos.js";
 import placementsRouter   from "./routes/placements.js";
+import activitiesRouter   from "./routes/activities.js";
 
 export function createApp(): {
   app: Express;
@@ -87,6 +88,7 @@ export function createApp(): {
   app.use("/api/attendance",   attendanceRouter);
   app.use("/api/demos",        demosRouter);
   app.use("/api/placements",   placementsRouter);
+  app.use("/api/activities",   activitiesRouter);
 
   // Dev tools — only available in development
   if (env.NODE_ENV === "development") {

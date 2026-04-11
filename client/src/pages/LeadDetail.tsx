@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
-import { ArrowLeft, Phone, Mail, MapPin, Pencil, Send, CheckSquare, Clock, ChevronDown, AlertTriangle, Save, CalendarPlus, Video, MapPin as LocationIcon } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, Pencil, Send, CheckSquare, Clock, ChevronDown, AlertTriangle, Save, CalendarPlus, Video, MapPin as LocationIcon, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
 import { Button } from "../components/ui/button.js";
@@ -32,10 +32,11 @@ export function LeadDetailPage() {
   const createTask  = useCreateTask();
   const qc = useQueryClient();
 
-  const [showSend,  setShowSend]  = useState(false);
-  const [showTask,  setShowTask]  = useState(false);
-  const [showStage, setShowStage] = useState(false);
-  const [showDemo,  setShowDemo]  = useState(false);
+  const [showSend,     setShowSend]     = useState(false);
+  const [showTask,     setShowTask]     = useState(false);
+  const [showStage,    setShowStage]    = useState(false);
+  const [showDemo,     setShowDemo]     = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
 
   if (isLoading) return <AppShell title="Lead Detail"><p className="text-gray-500">Loading…</p></AppShell>;
   const lead = data?.data;
@@ -82,6 +83,9 @@ export function LeadDetailPage() {
               </div>
             )}
           </div>
+          <Button variant="outline" size="sm" onClick={() => setShowActivity(true)}>
+            <Activity className="h-4 w-4" /> Log Activity
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowDemo(true)}>
             <CalendarPlus className="h-4 w-4" /> Schedule Demo
           </Button>
@@ -197,6 +201,9 @@ export function LeadDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Log Activity Dialog */}
+      <LogActivityDialog open={showActivity} onClose={() => setShowActivity(false)} leadId={id} />
 
       {/* Schedule Demo Dialog */}
       <ScheduleDemoDialog open={showDemo} onClose={() => setShowDemo(false)} leadId={id} />
@@ -634,6 +641,95 @@ function DemoSessionsCard({ leadId }: { leadId: string }) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Log Activity Dialog ──────────────────────────────────────
+function LogActivityDialog({ open, onClose, leadId }: { open: boolean; onClose: () => void; leadId: string }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    activity_type: "call", duration_min: "", outcome: "", notes: "",
+  });
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const mutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => apiRequest<any>("POST", "/api/activities", body),
+    onSuccess: () => {
+      toast.success("Activity logged");
+      qc.invalidateQueries({ queryKey: ["lead", leadId] });
+      onClose();
+    },
+    onError: () => toast.error("Failed to log activity"),
+  });
+
+  const handleSave = () => {
+    mutation.mutate({
+      lead_id: leadId,
+      activity_type: form.activity_type,
+      duration_sec: form.duration_min ? Math.round(parseFloat(form.duration_min) * 60) : null,
+      outcome: form.outcome || null,
+      notes: form.notes || null,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Log Activity</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Type</Label>
+              <Select value={form.activity_type} onValueChange={(v) => set("activity_type", v)}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["call","whatsapp","email","sms","meeting","visit","demo","other"].map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {form.activity_type === "call" && (
+              <div>
+                <Label>Duration (min)</Label>
+                <Input type="number" min="0" step="0.5" className="mt-1" value={form.duration_min}
+                  onChange={(e) => set("duration_min", e.target.value)} placeholder="e.g. 3.5" />
+              </div>
+            )}
+          </div>
+
+          {form.activity_type === "call" && (
+            <div>
+              <Label>Outcome</Label>
+              <Select value={form.outcome || "none"} onValueChange={(v) => set("outcome", v === "none" ? "" : v)}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="reached">Reached</SelectItem>
+                  <SelectItem value="no_answer">No Answer</SelectItem>
+                  <SelectItem value="busy">Busy</SelectItem>
+                  <SelectItem value="call_back">Call Back</SelectItem>
+                  <SelectItem value="interested">Interested</SelectItem>
+                  <SelectItem value="not_interested">Not Interested</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div>
+            <Label>Notes</Label>
+            <Input className="mt-1" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving…" : "Log Activity"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
