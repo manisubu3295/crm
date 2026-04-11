@@ -5,7 +5,7 @@ import {
   BarChart2, Settings, Zap, MessageSquare, RefreshCw,
   LogOut, User, ChevronRight, ChevronLeft, Menu, FlaskConical,
   GraduationCap, TrendingUp, CreditCard, Building2, BookOpen,
-  ClipboardCheck, FileText, Trophy, BookMarked,
+  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase,
 } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.js";
@@ -49,9 +49,10 @@ const NAV_SECTIONS = [
   {
     title: "TRAINING",
     items: [
-      { href: "/courses",    icon: BookMarked,     label: "Courses" },
-      { href: "/batches",    icon: BookOpen,       label: "Batches" },
-      { href: "/attendance", icon: ClipboardCheck, label: "Attendance" },
+      { href: "/courses",     icon: BookMarked,     label: "Courses" },
+      { href: "/batches",     icon: BookOpen,       label: "Batches" },
+      { href: "/attendance",  icon: ClipboardCheck, label: "Attendance" },
+      { href: "/placements",  icon: Briefcase,      label: "Placements" },
     ],
   },
 ];

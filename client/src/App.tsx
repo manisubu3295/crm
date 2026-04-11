@@ -26,6 +26,7 @@ import { LeaderboardPage }    from "./pages/Leaderboard.js";
 import { QuotationsPage }     from "./pages/Quotations.js";
 import { AttendancePage }     from "./pages/Attendance.js";
 import { CoursesPage }        from "./pages/Courses.js";
+import { PlacementsPage }    from "./pages/Placements.js";
 
 const IS_DEV = import.meta.env.DEV;
 
@@ -54,6 +55,7 @@ function AppRoutes() {
       <Route path="/quotations"   component={QuotationsPage} />
       <Route path="/attendance"   component={AttendancePage} />
       <Route path="/courses"      component={CoursesPage} />
+      <Route path="/placements"   component={PlacementsPage} />
       {IS_DEV && (
         <Route path="/dev/whatsapp"     component={DevWhatsAppPage} />
       )}
