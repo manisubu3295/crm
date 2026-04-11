@@ -36,10 +36,17 @@ router.post("/send", ...guard, async (req: TenantRequest, res) => {
 
 // GET /api/comms/templates  — list templates
 router.get("/templates", ...guard, async (req: TenantRequest, res) => {
-  const { channel } = req.query as { channel?: string };
+  const { channel, approvalStatus, all } = req.query as { channel?: string; approvalStatus?: string; all?: string };
+  const conds: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+  if (all !== "true") { conds.push("is_active = TRUE"); }
+  if (channel)        { conds.push(`channel = $${p++}`); params.push(channel); }
+  if (approvalStatus) { conds.push(`approval_status = $${p++}`); params.push(approvalStatus); }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const result = await req.db.query(
-    `SELECT * FROM message_templates WHERE is_active = TRUE ${channel ? "AND channel = $1" : ""} ORDER BY name`,
-    channel ? [channel] : []
+    `SELECT * FROM message_templates ${where} ORDER BY name`,
+    params
   );
   res.json({ ok: true, data: result.rows });
 });
@@ -66,22 +73,91 @@ router.post("/templates", ...guard, async (req: TenantRequest, res) => {
 
 // PATCH /api/comms/templates/:id
 router.patch("/templates/:id", ...guard, async (req: TenantRequest, res) => {
-  const { name, subject, body, isActive, waTemplateName } = req.body as {
+  const {
+    name, subject, body, isActive, waTemplateName,
+    approvalStatus, metaTemplateId, metaTemplateName, rejectionReason,
+  } = req.body as {
     name?: string; subject?: string; body?: string; isActive?: boolean; waTemplateName?: string;
+    approvalStatus?: string; metaTemplateId?: string; metaTemplateName?: string; rejectionReason?: string;
   };
   const sets: string[] = [];
   const params: unknown[] = [req.params["id"]];
   let p = 2;
-  if (name !== undefined)          { sets.push(`name = $${p++}`); params.push(name); }
-  if (subject !== undefined)       { sets.push(`subject = $${p++}`); params.push(subject); }
-  if (body !== undefined)          { sets.push(`body = $${p++}`); params.push(body); }
-  if (isActive !== undefined)      { sets.push(`is_active = $${p++}`); params.push(isActive); }
-  if (waTemplateName !== undefined) { sets.push(`wa_template_name = $${p++}`); params.push(waTemplateName); }
+  if (name !== undefined)             { sets.push(`name = $${p++}`); params.push(name); }
+  if (subject !== undefined)          { sets.push(`subject = $${p++}`); params.push(subject); }
+  if (body !== undefined)             { sets.push(`body = $${p++}`); params.push(body); }
+  if (isActive !== undefined)         { sets.push(`is_active = $${p++}`); params.push(isActive); }
+  if (waTemplateName !== undefined)   { sets.push(`wa_template_name = $${p++}`); params.push(waTemplateName); }
+  if (approvalStatus !== undefined)   {
+    sets.push(`approval_status = $${p++}`); params.push(approvalStatus);
+    if (approvalStatus === "pending")  { sets.push(`submitted_at = now()`); }
+    if (approvalStatus === "approved") { sets.push(`approved_at = now()`); }
+  }
+  if (metaTemplateId !== undefined)   { sets.push(`meta_template_id = $${p++}`); params.push(metaTemplateId); }
+  if (metaTemplateName !== undefined) { sets.push(`meta_template_name = $${p++}`); params.push(metaTemplateName); }
+  if (rejectionReason !== undefined)  { sets.push(`rejection_reason = $${p++}`); params.push(rejectionReason); }
 
   if (!sets.length) { res.status(400).json({ ok: false, message: "Nothing to update" }); return; }
 
-  await req.db.query(`UPDATE message_templates SET ${sets.join(", ")} WHERE id = $1`, params);
-  res.json({ ok: true });
+  const row = await req.db.query(
+    `UPDATE message_templates SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,
+    params
+  );
+  if (!row.rows.length) { res.status(404).json({ ok: false, message: "Not found" }); return; }
+  res.json({ ok: true, data: row.rows[0] });
+});
+
+// POST /api/comms/templates/:id/submit
+// Mark template as submitted to Meta for approval
+router.post("/templates/:id/submit", ...guard, async (req: TenantRequest, res) => {
+  const { metaTemplateName } = req.body as { metaTemplateName?: string };
+  const row = await req.db.query(
+    `UPDATE message_templates
+       SET approval_status = 'pending', submitted_at = now(),
+           meta_template_name = COALESCE($2, meta_template_name)
+     WHERE id = $1 AND channel = 'whatsapp'
+     RETURNING *`,
+    [req.params.id, metaTemplateName ?? null]
+  );
+  if (!row.rows.length) { res.status(404).json({ ok: false, message: "Template not found or not a WhatsApp template" }); return; }
+  res.json({ ok: true, data: row.rows[0] });
+});
+
+// POST /api/comms/templates/sync-approval
+// Called by Meta webhook or manually — updates approval_status from Meta
+router.post("/templates/sync-approval", ...guard, async (req: TenantRequest, res) => {
+  const updates = req.body as Array<{
+    metaTemplateId: string;
+    metaTemplateName: string;
+    status: string;
+    rejectionReason?: string;
+  }>;
+
+  if (!Array.isArray(updates)) {
+    res.status(400).json({ ok: false, message: "Expected array of template updates" }); return;
+  }
+
+  const results = [];
+  for (const u of updates) {
+    const dbStatus = u.status === "APPROVED" ? "approved"
+                   : u.status === "REJECTED" ? "rejected"
+                   : u.status === "PENDING"  ? "pending"
+                   : u.status === "PAUSED"   ? "paused"
+                   : "draft";
+    const row = await req.db.query(
+      `UPDATE message_templates
+         SET approval_status = $1,
+             meta_template_id = $2,
+             rejection_reason = $3,
+             approved_at = CASE WHEN $1 = 'approved' THEN now() ELSE approved_at END
+       WHERE meta_template_name = $4 OR wa_template_name = $4
+       RETURNING id, name, approval_status`,
+      [dbStatus, u.metaTemplateId, u.rejectionReason ?? null, u.metaTemplateName]
+    );
+    if (row.rows[0]) results.push(row.rows[0]);
+  }
+
+  res.json({ ok: true, updated: results.length, data: results });
 });
 
 export default router;

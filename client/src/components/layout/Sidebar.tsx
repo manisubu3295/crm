@@ -5,7 +5,7 @@ import {
   BarChart2, Settings, Zap, MessageSquare, RefreshCw,
   LogOut, User, ChevronRight, ChevronLeft, Menu, FlaskConical,
   GraduationCap, TrendingUp, CreditCard, Building2, BookOpen,
-  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star,
+  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star, LayoutTemplate,
 } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.js";
@@ -26,8 +26,9 @@ const NAV_SECTIONS = [
     items: [
       { href: "/pipeline",    icon: TrendingUp,  label: "Pipeline" },
       { href: "/campaigns",   icon: Megaphone,   label: "Campaigns" },
-      { href: "/automation",  icon: Zap,         label: "Automation" },
-      { href: "/reengagement",icon: RefreshCw,   label: "Re-engagement" },
+      { href: "/automation",  icon: Zap,           label: "Automation" },
+      { href: "/reengagement",icon: RefreshCw,     label: "Re-engagement" },
+      { href: "/templates",   icon: LayoutTemplate, label: "WA Templates" },
     ],
   },
   {
