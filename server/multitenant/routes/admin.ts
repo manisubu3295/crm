@@ -67,7 +67,7 @@ router.get("/courses/stats", ...guard, async (req: TenantRequest, res) => {
       COUNT(*) FILTER (WHERE is_active)::int          AS active_courses,
       COALESCE((SELECT COUNT(*) FROM batches), 0)::int AS total_batches,
       COALESCE((SELECT COUNT(*) FROM enrollments), 0)::int AS total_enrollments,
-      COALESCE((SELECT SUM(amount) FROM payments WHERE status = 'paid'), 0)::numeric AS total_revenue
+      COALESCE((SELECT SUM(amount) FROM payments WHERE status = 'completed'), 0)::numeric AS total_revenue
     FROM courses
   `);
   res.json({ ok: true, data: r.rows[0] });

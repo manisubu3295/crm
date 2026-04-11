@@ -20,7 +20,6 @@ router.get("/", ...guard, async (req: TenantRequest, res) => {
               SUM(spend) AS spend
        FROM campaign_stats WHERE campaign_id = c.id
      ) s ON TRUE
-     WHERE c.is_active = TRUE
      ORDER BY c.created_at DESC`
   );
   res.json({ ok: true, data: result.rows });

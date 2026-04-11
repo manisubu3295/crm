@@ -13,7 +13,7 @@ router.get("/leaderboard", ...guard, async (req: TenantRequest, res) => {
 
   const rows = await req.db.query(
     `SELECT
-       u.id, u.full_name, u.phone,
+       u.id, u.username, u.full_name AS counsellor_name, u.phone,
        COALESCE(ct.revenue_target,   0) AS revenue_target,
        COALESCE(ct.admission_target, 0) AS admission_target,
        -- Actual revenue from payments recorded this month and attributed to leads assigned to this counsellor
@@ -23,26 +23,34 @@ router.get("/leaderboard", ...guard, async (req: TenantRequest, res) => {
          WHERE l2.assigned_to = u.id
            AND DATE_TRUNC('month', p.paid_at) = make_date($2,$1,1)
            AND p.status = 'completed'
-       ), 0) AS actual_revenue,
+       ), 0) AS collected,
        -- Admissions this month
        COUNT(DISTINCT l.id) FILTER (
          WHERE l.stage = 'admitted'
            AND DATE_TRUNC('month', l.admitted_at) = make_date($2,$1,1)
-       ) AS actual_admissions,
+       ) AS admissions,
        -- Total assigned leads
        COUNT(DISTINCT l.id) AS total_leads,
        -- Tasks done this month
        COUNT(DISTINCT t.id) FILTER (
          WHERE t.status = 'done'
            AND DATE_TRUNC('month', t.completed_at) = make_date($2,$1,1)
-       ) AS tasks_done
+       ) AS tasks_done,
+       -- Achievement %
+       ROUND(100.0 * COALESCE((
+         SELECT SUM(p.amount) FROM payments p
+         JOIN leads l2 ON l2.id = p.lead_id
+         WHERE l2.assigned_to = u.id
+           AND DATE_TRUNC('month', p.paid_at) = make_date($2,$1,1)
+           AND p.status = 'completed'
+       ), 0) / NULLIF(COALESCE(ct.revenue_target, 0), 0), 1) AS pct
      FROM users u
      LEFT JOIN counsellor_targets ct ON ct.user_id = u.id AND ct.month = $1 AND ct.year = $2
      LEFT JOIN leads l ON l.assigned_to = u.id
      LEFT JOIN tasks t ON t.assigned_to = u.id
      WHERE u.role IN ('counsellor','manager') AND u.is_active = true
-     GROUP BY u.id, u.full_name, u.phone, ct.revenue_target, ct.admission_target
-     ORDER BY actual_revenue DESC`,
+     GROUP BY u.id, u.username, u.full_name, u.phone, ct.revenue_target, ct.admission_target
+     ORDER BY collected DESC`,
     [month, year]
   );
   res.json({ ok: true, data: rows.rows, meta: { month, year } });

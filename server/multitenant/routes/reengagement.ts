@@ -29,16 +29,26 @@ router.get("/:id/leads", ...guard, async (req: TenantRequest, res) => {
   const c = campaign.rows[0];
 
   const leads = await req.db.query(
-    `SELECT l.id, l.lead_no, l.full_name, l.phone, l.stage, l.last_contacted_at,
-       EXTRACT(DAY FROM now() - l.last_contacted_at)::int AS dormant_days,
-       (SELECT COUNT(*) FROM reengagement_log rl WHERE rl.lead_id = l.id AND rl.campaign_id = $3) AS attempts
-     FROM leads l
-     WHERE l.re_engagement_eligible = TRUE
-       AND l.stage NOT IN ('admitted','lost')
-       ${c.target_stage ? "AND l.stage = $2" : "AND 1=1"}
-       AND (l.last_contacted_at IS NULL OR l.last_contacted_at < now() - ($1 || ' days')::INTERVAL)
-     ORDER BY l.last_contacted_at ASC NULLS FIRST
-     LIMIT 50`,
+    c.target_stage
+      ? `SELECT l.id, l.lead_no, l.full_name, l.phone, l.stage, l.last_contacted_at,
+           EXTRACT(DAY FROM now() - l.last_contacted_at)::int AS dormant_days,
+           (SELECT COUNT(*) FROM reengagement_log rl WHERE rl.lead_id = l.id AND rl.campaign_id = $3) AS attempts
+         FROM leads l
+         WHERE l.re_engagement_eligible = TRUE
+           AND l.stage NOT IN ('admitted','lost')
+           AND l.stage = $2
+           AND (l.last_contacted_at IS NULL OR l.last_contacted_at < now() - ($1 || ' days')::INTERVAL)
+         ORDER BY l.last_contacted_at ASC NULLS FIRST
+         LIMIT 50`
+      : `SELECT l.id, l.lead_no, l.full_name, l.phone, l.stage, l.last_contacted_at,
+           EXTRACT(DAY FROM now() - l.last_contacted_at)::int AS dormant_days,
+           (SELECT COUNT(*) FROM reengagement_log rl WHERE rl.lead_id = l.id AND rl.campaign_id = $2) AS attempts
+         FROM leads l
+         WHERE l.re_engagement_eligible = TRUE
+           AND l.stage NOT IN ('admitted','lost')
+           AND (l.last_contacted_at IS NULL OR l.last_contacted_at < now() - ($1 || ' days')::INTERVAL)
+         ORDER BY l.last_contacted_at ASC NULLS FIRST
+         LIMIT 50`,
     c.target_stage ? [c.dormant_days, c.target_stage, c.id] : [c.dormant_days, c.id]
   );
   res.json({ ok: true, data: leads.rows });

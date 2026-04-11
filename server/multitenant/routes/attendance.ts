@@ -86,7 +86,7 @@ router.get("/batch/:batchId/summary", ...guard, async (req: TenantRequest, res) 
     ok: true,
     data: {
       date: targetDate,
-      students: rows.rows,
+      roll: rows.rows,
       summary: { total: rows.rows.length, present: totalPresent, absent: totalAbsent, marked: totalMarked },
     },
   });
