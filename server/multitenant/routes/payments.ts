@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { tenantFromHeader, authAndTenantGuard } from "../auth/tenantGuard.js";
+import { razorpayService } from "../services/razorpayService.js";
+import { whatsappService } from "../services/whatsappService.js";
 import type { TenantRequest } from "../types.js";
 
 const router = Router();
@@ -242,6 +244,67 @@ router.get("/dues", ...guard, async (req: TenantRequest, res) => {
     data: { overdue: overdue.rows, upcoming: upcoming.rows },
     meta: { overdueAmt, upcomingAmt, overdueCount: overdue.rowCount, upcomingCount: upcoming.rowCount },
   });
+});
+
+// ─── POST /api/payments/send-link — create Razorpay link + WhatsApp ──────────
+router.post("/send-link", ...guard, async (req: TenantRequest, res) => {
+  const user = (req as any).user as { id: string };
+  const { lead_id, amount, description, expire_days = 3 } = req.body as Record<string, unknown>;
+
+  if (!lead_id || !amount) {
+    res.status(400).json({ ok: false, message: "lead_id and amount required" });
+    return;
+  }
+
+  if (!razorpayService.isConfigured()) {
+    res.status(400).json({ ok: false, message: "Razorpay not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to env" });
+    return;
+  }
+
+  // Fetch lead details
+  const leadRow = await req.db.query(
+    "SELECT full_name, phone, email FROM leads WHERE id=$1",
+    [lead_id]
+  );
+  if (!leadRow.rows[0]) {
+    res.status(404).json({ ok: false, message: "Lead not found" }); return;
+  }
+  const lead = leadRow.rows[0];
+
+  // Generate receipt id and create link
+  const receiptId = `RCP-${Date.now()}`;
+  const expireBy = new Date();
+  expireBy.setDate(expireBy.getDate() + parseInt(String(expire_days)));
+
+  const link = await razorpayService.createPaymentLink({
+    amount: parseFloat(String(amount)),
+    leadName: lead.full_name,
+    leadPhone: lead.phone,
+    leadEmail: lead.email ?? undefined,
+    description: String(description || `Fee payment for ${lead.full_name}`),
+    receiptId,
+    expireBy,
+  });
+
+  // Store the pending payment record with receipt = link id
+  const payRow = await req.db.query(
+    `INSERT INTO payments (lead_id, amount, method, status, receipt_no, notes, recorded_by)
+     VALUES ($1,$2,'online','pending',$3,$4,$5) RETURNING *`,
+    [lead_id, amount, link.id, `Razorpay link sent: ${link.short_url}`, user.id]
+  );
+
+  // Send WhatsApp with link
+  const msg =
+    `Hi ${lead.full_name}, please complete your fee payment of ₹${parseFloat(String(amount)).toLocaleString("en-IN")} ` +
+    `using this secure link: ${link.short_url}\nValid until ${expireBy.toLocaleDateString("en-IN")}.`;
+
+  try {
+    await whatsappService.sendText(lead.phone, msg);
+  } catch (err) {
+    // Non-fatal — link is still created
+  }
+
+  res.status(201).json({ ok: true, data: { payment: payRow.rows[0], link } });
 });
 
 // ─── PATCH /api/payments/installments/:id ────────────────────

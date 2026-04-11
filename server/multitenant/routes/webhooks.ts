@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { env } from "../env.js";
 import { leadService } from "../services/leadService.js";
 import { communicationService } from "../services/communicationService.js";
+import { razorpayService } from "../services/razorpayService.js";
 import { getPool } from "../tenant/dbPool.js";
 import { getRegistry } from "../tenant/registry.js";
 import { emitToTenant } from "../lib/socketEmitter.js";
@@ -402,5 +403,55 @@ async function findTenantByPhoneNumberId(_phoneNumberId: string): Promise<string
   const firstTenantId = Object.keys(registry.tenants)[0];
   return firstTenantId ?? null;
 }
+
+// ─── Razorpay Payment Webhook ─────────────────────────────────
+// POST /api/webhooks/razorpay?tenant=<tenantId>
+router.post("/razorpay", async (req, res) => {
+  const tenantId = (req.query["tenant"] as string) ?? Object.keys(getRegistry().tenants)[0];
+  const signature = req.headers["x-razorpay-signature"] as string ?? "";
+  const raw = JSON.stringify(req.body);
+
+  if (env.RAZORPAY_WEBHOOK_SECRET && !razorpayService.verifyWebhookSignature(raw, signature)) {
+    logger.warn({ tenantId }, "Razorpay webhook signature mismatch");
+    res.status(400).json({ ok: false, message: "Invalid signature" });
+    return;
+  }
+
+  const event = req.body?.event as string;
+  const payload = req.body?.payload;
+
+  logger.info({ tenantId, event }, "Razorpay webhook received");
+
+  // payment_link.paid — customer has paid
+  if (event === "payment_link.paid") {
+    const linkId = payload?.payment_link?.entity?.id as string;
+    const amount = (payload?.payment?.entity?.amount as number ?? 0) / 100; // paise → ₹
+    const paymentId = payload?.payment?.entity?.id as string;
+
+    if (linkId) {
+      try {
+        const db = await getPool(tenantId);
+        // Find the pending payment record by receipt_no = linkId
+        const row = await db.query(
+          "SELECT * FROM payments WHERE receipt_no = $1 AND status = 'pending' LIMIT 1",
+          [linkId]
+        );
+        if (row.rows[0]) {
+          await db.query(
+            `UPDATE payments SET status='completed', notes='Razorpay payment ID: ' || $2, updated_at=now()
+             WHERE id=$1`,
+            [row.rows[0].id, paymentId]
+          );
+          emitToTenant(tenantId, "payment:completed", { paymentId: row.rows[0].id, leadId: row.rows[0].lead_id, amount });
+          logger.info({ tenantId, linkId, paymentId, amount }, "Razorpay payment marked completed");
+        }
+      } catch (err) {
+        logger.error({ tenantId, linkId, err }, "Razorpay webhook DB update failed");
+      }
+    }
+  }
+
+  res.json({ ok: true });
+});
 
 export default router;

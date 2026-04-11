@@ -55,6 +55,9 @@ export function createApp(): {
     }
   );
 
+  // Razorpay webhook — JSON body (signature verified inside handler)
+  app.use("/api/webhooks/razorpay", express.json());
+
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
 

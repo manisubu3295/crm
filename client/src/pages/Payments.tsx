@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { IndianRupee, Plus, TrendingUp, Clock, CheckCircle2, AlertTriangle, Search, CalendarClock } from "lucide-react";
+import { IndianRupee, Plus, TrendingUp, Clock, CheckCircle2, AlertTriangle, Search, CalendarClock, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.js";
@@ -35,6 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function PaymentsPage() {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
+  const [showLink, setShowLink] = useState(false);
   const [search, setSearch] = useState("");
   const [method, setMethod] = useState("");
   const [status, setStatus] = useState("");
@@ -220,6 +221,9 @@ export function PaymentsPage() {
                 <SelectItem value="refunded">Refunded</SelectItem>
               </SelectContent>
             </Select>
+            <Button size="sm" variant="outline" onClick={() => setShowLink(true)}>
+              <Link2 className="h-4 w-4" /> Send Payment Link
+            </Button>
             <Button size="sm" onClick={() => setShowNew(true)}>
               <Plus className="h-4 w-4" /> Record Payment
             </Button>
@@ -268,6 +272,9 @@ export function PaymentsPage() {
           loading={createMutation.isPending}
         />
       )}
+
+      {/* Send Payment Link Dialog */}
+      {showLink && <SendPaymentLinkDialog onClose={() => setShowLink(false)} onDone={() => { setShowLink(false); qc.invalidateQueries({ queryKey: ["payments"] }); }} />}
     </AppShell>
   );
 }
@@ -448,6 +455,107 @@ function NewPaymentDialog({ onClose, onSave, loading }: { onClose: () => void; o
             <Button onClick={handleSave} disabled={loading}>{loading ? "Saving…" : "Save Payment"}</Button>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Send Payment Link Dialog (Razorpay) ──────────────────────
+function SendPaymentLinkDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [leadSearch, setLeadSearch] = useState("");
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [form, setForm] = useState({ amount: "", description: "", expire_days: "3" });
+  const [result, setResult] = useState<{ short_url: string } | null>(null);
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const { data: leadsData } = useQuery({
+    queryKey: ["leads-search-link", leadSearch],
+    queryFn: () => apiRequest<any>("GET", `/api/leads?search=${encodeURIComponent(leadSearch)}&limit=10`),
+    enabled: leadSearch.length > 1,
+  });
+  const leads: any[] = leadsData?.data ?? [];
+
+  const mutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => apiRequest<any>("POST", "/api/payments/send-link", body),
+    onSuccess: (data) => {
+      setResult(data.data?.link ?? null);
+      toast.success("Payment link created and sent via WhatsApp");
+    },
+    onError: (err: any) => toast.error(err?.message ?? "Failed to create payment link"),
+  });
+
+  const handleSend = () => {
+    if (!selectedLead) { toast.error("Select a lead"); return; }
+    if (!form.amount || parseFloat(form.amount) <= 0) { toast.error("Enter valid amount"); return; }
+    mutation.mutate({
+      lead_id: selectedLead.id,
+      amount: parseFloat(form.amount),
+      description: form.description || undefined,
+      expire_days: parseInt(form.expire_days),
+    });
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Send Payment Link (Razorpay)</DialogTitle></DialogHeader>
+        {result ? (
+          <div className="space-y-4 py-2 text-center">
+            <p className="text-sm text-green-700 font-medium">Payment link sent via WhatsApp!</p>
+            <a href={result.short_url} target="_blank" rel="noopener noreferrer"
+              className="block text-blue-600 underline text-sm break-all">{result.short_url}</a>
+            <p className="text-xs text-gray-400">Customer can also pay via SMS link sent by Razorpay.</p>
+            <Button onClick={onDone} className="w-full">Done</Button>
+          </div>
+        ) : (
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Student / Lead</Label>
+              {selectedLead ? (
+                <div className="flex items-center justify-between mt-1 rounded-lg border px-3 py-2">
+                  <div><p className="text-sm font-medium">{selectedLead.full_name}</p><p className="text-xs text-gray-500">{selectedLead.phone}</p></div>
+                  <button className="text-xs text-red-500 hover:underline" onClick={() => setSelectedLead(null)}>Change</button>
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <Input placeholder="Search student name or phone…" value={leadSearch} onChange={(e) => setLeadSearch(e.target.value)} />
+                  {leads.length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full rounded-lg border bg-white shadow-lg max-h-48 overflow-y-auto">
+                      {leads.map((l) => (
+                        <button key={l.id} onClick={() => { setSelectedLead(l); setLeadSearch(""); }}
+                          className="flex w-full flex-col px-3 py-2 text-left hover:bg-gray-50 border-b last:border-0">
+                          <span className="text-sm font-medium">{l.full_name}</span>
+                          <span className="text-xs text-gray-500">{l.phone}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Amount (₹) *</Label>
+                <Input type="number" min="1" className="mt-1" value={form.amount} onChange={(e) => set("amount", e.target.value)} placeholder="0" />
+              </div>
+              <div>
+                <Label>Expires in (days)</Label>
+                <Input type="number" min="1" max="30" className="mt-1" value={form.expire_days} onChange={(e) => set("expire_days", e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input className="mt-1" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Course fee — Batch Jan 2026" />
+            </div>
+            <p className="text-xs text-gray-400">The payment link will be sent via WhatsApp to the student's registered number. Payment auto-confirms when completed.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSend} disabled={mutation.isPending}>
+                {mutation.isPending ? "Creating…" : "Send Link"}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
