@@ -6,6 +6,7 @@ import { leadScoringService } from "./leadScoringService.js";
 import { automationService } from "./automationService.js";
 import { emitToTenant } from "../lib/socketEmitter.js";
 import { notificationService } from "./notificationService.js";
+import { whatsappService } from "./whatsappService.js";
 import logger from "../logger.js";
 
 export const leadService = {
@@ -54,7 +55,7 @@ export const leadService = {
   },
 
   async getById(db: Pool, id: string) {
-    const [lead, stageHistory, tasks, comms] = await Promise.all([
+    const [lead, stageHistory, tasks, comms, referrer, referrals] = await Promise.all([
       db.query(
         `SELECT l.*, u.full_name AS assigned_to_name, c.name AS course_name, camp.name AS campaign_name
          FROM leads l
@@ -76,6 +77,16 @@ export const leadService = {
         "SELECT * FROM communication_logs WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 50",
         [id]
       ),
+      // Who referred this lead?
+      db.query(
+        "SELECT id, full_name, phone, stage FROM leads WHERE id = (SELECT referred_by FROM leads WHERE id = $1)",
+        [id]
+      ),
+      // Leads this person has referred
+      db.query(
+        "SELECT id, full_name, phone, stage, admitted_at FROM leads WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 10",
+        [id]
+      ),
     ]);
 
     if (!lead.rows[0]) return null;
@@ -85,6 +96,8 @@ export const leadService = {
       stageHistory: stageHistory.rows,
       tasks: tasks.rows,
       communications: comms.rows,
+      referrer: referrer.rows[0] ?? null,
+      referrals: referrals.rows,
     };
   },
 
@@ -103,8 +116,8 @@ export const leadService = {
       `INSERT INTO leads
          (full_name, email, phone, alternate_phone, city, qualification,
           course_id, source, campaign_id, ad_id, form_id, stage,
-          lead_score, assigned_to, is_duplicate, duplicate_of)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',$12,$13,$14,$15)
+          lead_score, assigned_to, is_duplicate, duplicate_of, referred_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         data.fullName, data.email, data.phone, data.alternatePhone,
@@ -113,6 +126,7 @@ export const leadService = {
         data.assignedTo,
         dupResult.isDuplicate,
         dupResult.matchedLeadId ?? null,
+        (data as any).referredBy ?? null,
       ]
     );
 
@@ -161,6 +175,39 @@ export const leadService = {
       fromStage,
       toStage,
     });
+
+    // ── Referral thank-you: fire when referred lead is admitted ──
+    if (toStage === "admitted") {
+      try {
+        const refRow = await db.query(
+          `SELECT l2.full_name AS referrer_name, l2.phone AS referrer_phone,
+                  l.full_name AS referred_name, l.referred_by
+           FROM leads l
+           JOIN leads l2 ON l2.id = l.referred_by
+           WHERE l.id = $1 AND l.referred_by IS NOT NULL`,
+          [id]
+        );
+        if (refRow.rows[0]) {
+          const { referrer_name, referrer_phone, referred_name } = refRow.rows[0];
+          const msg =
+            `Hi ${referrer_name}, great news! ${referred_name}, whom you referred, has successfully enrolled. ` +
+            `Thank you for spreading the word — we truly appreciate it!`;
+          await whatsappService.sendText(referrer_phone, msg);
+
+          // Log the reward
+          await db.query(
+            `INSERT INTO referral_rewards (referrer_id, referred_id, reward_type, status, sent_at)
+             SELECT l.referred_by, l.id, 'whatsapp_thankyou', 'sent', now()
+             FROM leads l WHERE l.id = $1
+             ON CONFLICT (referrer_id, referred_id) DO UPDATE SET status='sent', sent_at=now()`,
+            [id]
+          );
+          logger.info({ tenantId, leadId: id }, "Referral thank-you WhatsApp sent");
+        }
+      } catch (err) {
+        logger.warn({ tenantId, leadId: id, err }, "Referral thank-you failed");
+      }
+    }
 
     // Real-time event
     emitToTenant(tenantId, "lead:stage_changed", { leadId: id, from: fromStage, to: toStage });

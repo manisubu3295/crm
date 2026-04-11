@@ -144,6 +144,9 @@ export function LeadDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Referral Info */}
+          <ReferralCard leadId={id} referrer={lead.referrer} referrals={lead.referrals ?? []} />
+
           {/* Objection Tracking */}
           <ObjectionNotes leadId={id} objectionNotes={lead.objection_notes ?? ""} lostReason={lead.lost_reason ?? ""} stage={lead.stage} />
         </div>
@@ -204,6 +207,102 @@ export function LeadDetailPage() {
       {/* Add Task Dialog */}
       <AddTaskDialog open={showTask} onClose={() => setShowTask(false)} leadId={id} assignedTo={lead.assigned_to} />
     </AppShell>
+  );
+}
+
+// ─── Referral Card ────────────────────────────────────────────
+function ReferralCard({ leadId, referrer, referrals }: { leadId: string; referrer: any; referrals: any[] }) {
+  const qc = useQueryClient();
+  const [searchRef, setSearchRef] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+
+  const { data: searchData } = useQuery({
+    queryKey: ["leads-ref-search", searchRef],
+    queryFn: () => apiRequest<any>("GET", `/api/leads?search=${encodeURIComponent(searchRef)}&limit=8`),
+    enabled: searchRef.length > 1,
+  });
+  const searchResults: any[] = searchData?.data ?? [];
+
+  const setReferrer = async (refId: string | null) => {
+    await apiRequest("PATCH", `/api/leads/${leadId}/referred-by`, { referredBy: refId });
+    qc.invalidateQueries({ queryKey: ["lead", leadId] });
+    setShowSearch(false);
+    setSearchRef("");
+    toast.success(refId ? "Referrer set" : "Referrer removed");
+  };
+
+  if (!referrer && referrals.length === 0 && !showSearch) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <button onClick={() => setShowSearch(true)}
+            className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            + Set referrer
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Referral</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {referrer && (
+          <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-blue-800">Referred by</p>
+              <p className="text-sm font-semibold">{referrer.full_name}</p>
+              <p className="text-xs text-gray-500">{referrer.phone} · {referrer.stage}</p>
+            </div>
+            <button onClick={() => setReferrer(null)} className="text-[10px] text-red-500 hover:underline">Remove</button>
+          </div>
+        )}
+
+        {referrals.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Referred {referrals.length} lead{referrals.length > 1 ? "s" : ""}</p>
+            {referrals.map((r: any) => (
+              <div key={r.id} className="flex items-center justify-between py-1 border-b last:border-0">
+                <div>
+                  <p className="text-xs font-medium">{r.full_name}</p>
+                  <p className="text-[10px] text-gray-400">{r.phone}</p>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STAGE_COLORS[r.stage] ?? "bg-gray-100"}`}>
+                  {r.stage}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!referrer && (
+          <div>
+            {showSearch ? (
+              <div className="relative">
+                <Input placeholder="Search referrer by name/phone…" value={searchRef} onChange={(e) => setSearchRef(e.target.value)}
+                  autoFocus className="text-xs" />
+                {searchResults.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border bg-white shadow-lg max-h-40 overflow-y-auto">
+                    {searchResults.filter((r: any) => r.id !== leadId).map((r: any) => (
+                      <button key={r.id} onClick={() => setReferrer(r.id)}
+                        className="flex w-full flex-col px-3 py-1.5 text-left hover:bg-gray-50 border-b last:border-0">
+                        <span className="text-xs font-medium">{r.full_name}</span>
+                        <span className="text-[10px] text-gray-400">{r.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button onClick={() => setShowSearch(true)} className="text-xs text-blue-600 hover:underline">+ Set referrer</button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

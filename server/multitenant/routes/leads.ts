@@ -146,4 +146,46 @@ router.post("/:id/merge", ...guard, async (req: TenantRequest, res) => {
   res.json({ ok: true, data: result });
 });
 
+// ─── GET /api/leads/:id/referrals — leads referred by this person ────────────
+router.get("/:id/referrals", ...guard, async (req: TenantRequest, res) => {
+  const rows = await req.db.query(
+    `SELECT l.id, l.lead_no, l.full_name, l.phone, l.stage, l.admitted_at, l.created_at,
+            rr.status AS reward_status, rr.sent_at AS reward_sent_at
+     FROM leads l
+     LEFT JOIN referral_rewards rr ON rr.referred_id = l.id AND rr.referrer_id = $1
+     WHERE l.referred_by = $1
+     ORDER BY l.created_at DESC`,
+    [req.params.id]
+  );
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── GET /api/leads/referral-stats — top referrers ──────────────────────────
+router.get("/referral-stats", ...guard, async (req: TenantRequest, res) => {
+  const rows = await req.db.query(`
+    SELECT
+      l.id, l.full_name, l.phone,
+      COUNT(r.id)::int                                             AS total_referrals,
+      COUNT(r.id) FILTER (WHERE r.stage = 'admitted')::int        AS admitted_referrals,
+      COUNT(rr.id) FILTER (WHERE rr.status = 'sent')::int         AS rewards_sent
+    FROM leads l
+    JOIN leads r ON r.referred_by = l.id
+    LEFT JOIN referral_rewards rr ON rr.referrer_id = l.id
+    GROUP BY l.id, l.full_name, l.phone
+    ORDER BY total_referrals DESC
+    LIMIT 20
+  `);
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── PATCH /api/leads/:id/referred-by ───────────────────────────────────────
+router.patch("/:id/referred-by", ...guard, async (req: TenantRequest, res) => {
+  const { referredBy } = req.body as { referredBy: string | null };
+  await req.db.query(
+    "UPDATE leads SET referred_by = $2, updated_at = now() WHERE id = $1",
+    [req.params.id, referredBy ?? null]
+  );
+  res.json({ ok: true });
+});
+
 export default router;
