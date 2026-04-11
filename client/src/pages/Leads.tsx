@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, Search, Filter, Upload, Phone, Mail, UserPlus, ArrowRightLeft, X } from "lucide-react";
+import { Plus, Search, Upload, Phone, Mail, UserPlus, X, Flame } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
@@ -21,6 +21,7 @@ export function LeadsPage() {
   const [search, setSearch]   = useState("");
   const [stage, setStage]     = useState("");
   const [source, setSource]   = useState("");
+  const [aging, setAging]     = useState("");
   const [showNew, setShowNew] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting]   = useState(false);
@@ -30,8 +31,9 @@ export function LeadsPage() {
     ...(search ? { search } : {}),
     ...(stage  ? { stage  } : {}),
     ...(source ? { source } : {}),
+    ...(aging  ? { aging  } : {}),
     limit: 50,
-  });
+  } as any);
 
   const leads = data?.data ?? [];
 
@@ -83,6 +85,16 @@ export function LeadsPage() {
             {["meta_ads","website","manual","walk_in","phone","referral","excel_import"].map((s) => (
               <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={aging || "all"} onValueChange={(v) => setAging(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="All aging" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All aging</SelectItem>
+            <SelectItem value="fresh">Fresh (&lt;3d)</SelectItem>
+            <SelectItem value="aging">Aging (3-7d)</SelectItem>
+            <SelectItem value="stale">Stale (&gt;7d)</SelectItem>
           </SelectContent>
         </Select>
 
@@ -168,23 +180,29 @@ function ListView({ leads, isLoading, selected, onSelectChange }: { leads: any[]
               <input type="checkbox" checked={allSelected} onChange={toggleAll}
                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             </th>
-            {["Lead", "Contact", "Course", "Source", "Stage", "Score", "Assigned", "Created"].map((h) => (
+            {["Lead", "Contact", "Course", "Source", "Stage", "Aging", "Score", "Assigned", "Created"].map((h) => (
               <th key={h} className="px-4 py-3 font-medium text-gray-500">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {isLoading && (
-            <tr><td colSpan={9} className="py-12 text-center text-gray-400">Loading...</td></tr>
+            <tr><td colSpan={10} className="py-12 text-center text-gray-400">Loading...</td></tr>
           )}
           {!isLoading && leads.length === 0 && (
-            <tr><td colSpan={9} className="py-12 text-center text-gray-400">No leads found</td></tr>
+            <tr><td colSpan={10} className="py-12 text-center text-gray-400">No leads found</td></tr>
           )}
           {leads.map((lead) => {
             const scoreInfo = getScoreLabel(lead.lead_score);
             const checked = selected.has(lead.id);
+            const days = lead.days_in_stage ?? 0;
+            const agingInfo = days > 7
+              ? { label: `${days}d`, cls: "bg-red-100 text-red-700",    row: "border-l-2 border-l-red-400" }
+              : days >= 3
+              ? { label: `${days}d`, cls: "bg-amber-100 text-amber-700", row: "border-l-2 border-l-amber-400" }
+              : { label: `${days}d`, cls: "bg-green-100 text-green-700", row: "" };
             return (
-              <tr key={lead.id} className={`border-b border-gray-50 hover:bg-gray-50 ${checked ? "bg-blue-50/50" : ""}`}>
+              <tr key={lead.id} className={`border-b border-gray-50 hover:bg-gray-50 ${checked ? "bg-blue-50/50" : ""} ${agingInfo.row}`}>
                 <td className="px-3 py-3">
                   <input type="checkbox" checked={checked} onChange={() => toggleOne(lead.id)}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
@@ -208,6 +226,11 @@ function ListView({ leads, isLoading, selected, onSelectChange }: { leads: any[]
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STAGE_COLORS[lead.stage]}`}>
                     {STAGE_LABELS[lead.stage] ?? lead.stage}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${agingInfo.cls}`}>
+                    {days > 7 && <Flame className="h-2.5 w-2.5" />}{agingInfo.label}
                   </span>
                 </td>
                 <td className="px-4 py-3">

@@ -24,15 +24,25 @@ export const leadService = {
       params.push(`%${query.search}%`);
       p++;
     }
-    if (query.fromDate) { conditions.push(`created_at >= $${p++}`); params.push(query.fromDate); }
-    if (query.toDate)   { conditions.push(`created_at <= $${p++}`); params.push(query.toDate); }
+    if (query.fromDate) { conditions.push(`l.created_at >= $${p++}`); params.push(query.fromDate); }
+    if (query.toDate)   { conditions.push(`l.created_at <= $${p++}`); params.push(query.toDate); }
+
+    // Aging filter: days_in_stage bucket
+    const agingFilter = (query as any).aging as string | undefined;
+    if (agingFilter === "fresh")  conditions.push(`EXTRACT(EPOCH FROM (now() - COALESCE((SELECT MAX(changed_at) FROM lead_stage_history WHERE lead_id=l.id), l.created_at)))/86400 < 3`);
+    if (agingFilter === "aging")  conditions.push(`EXTRACT(EPOCH FROM (now() - COALESCE((SELECT MAX(changed_at) FROM lead_stage_history WHERE lead_id=l.id), l.created_at)))/86400 BETWEEN 3 AND 7`);
+    if (agingFilter === "stale")  conditions.push(`EXTRACT(EPOCH FROM (now() - COALESCE((SELECT MAX(changed_at) FROM lead_stage_history WHERE lead_id=l.id), l.created_at)))/86400 > 7`);
 
     const where = conditions.join(" AND ");
     const offset = (query.page - 1) * query.limit;
 
     const [rows, count] = await Promise.all([
       db.query(
-        `SELECT l.*, u.full_name AS assigned_to_name, c.name AS course_name
+        `SELECT l.*, u.full_name AS assigned_to_name, c.name AS course_name,
+                ROUND(EXTRACT(EPOCH FROM (now() - COALESCE(
+                  (SELECT MAX(changed_at) FROM lead_stage_history WHERE lead_id = l.id),
+                  l.created_at
+                )))/86400)::int AS days_in_stage
          FROM leads l
          LEFT JOIN users u ON l.assigned_to = u.id
          LEFT JOIN courses c ON l.course_id = c.id
@@ -41,7 +51,7 @@ export const leadService = {
          LIMIT $${p} OFFSET $${p + 1}`,
         [...params, query.limit, offset]
       ),
-      db.query(`SELECT COUNT(*) FROM leads WHERE ${where}`, params),
+      db.query(`SELECT COUNT(*) FROM leads l WHERE ${where}`, params),
     ]);
 
     return {
