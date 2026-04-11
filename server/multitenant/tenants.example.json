@@ -1,0 +1,12 @@
+{
+  "tenants": {
+    "demo": {
+      "dbUrl": "postgresql://crm:secret@localhost:5432/crm_demo",
+      "displayName": "Demo Institution"
+    },
+    "acme-training": {
+      "dbUrl": "postgresql://crm:secret@localhost:5432/crm_acme",
+      "displayName": "Acme Training Institute"
+    }
+  }
+}

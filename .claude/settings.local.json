@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls:*)",
+      "Bash(xargs grep:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx -p typescript tsc --noEmit)",
+      "Bash(jobs -l)",
+      "Bash(psql:*)",
+      "Bash(node:*)",
+      "Bash(grep -n \"\\\\.map\\(\" pages/*.tsx)",
+      "Bash(grep -A1 \"\\\\.map\\(\" pages/*.tsx)",
+      "Bash(grep -v \"^--$\")",
+      "Bash(grep -E \"\\\\.\\(ts|js|sql\\)$\")",
+      "Bash(grep -h \"CREATE TABLE\" \"D:/Aadhirai-web/crm/server/multitenant/migrations/\"*.sql)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(curl -s -X POST http://localhost:3000/api/dev/seed-test-data -H \"Content-Type: application/json\" -H \"X-Tenant: demo\" -d \"{}\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/dev/seed-test-data -H \"Content-Type: application/json\" -H \"X-Tenant: demo\" -d \"{}\")",
+      "Bash(redis-cli -u redis://localhost:6379 ping)",
+      "Bash(netstat -ano)"
+    ]
+  }
+}
