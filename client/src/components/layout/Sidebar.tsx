@@ -5,7 +5,7 @@ import {
   BarChart2, Settings, Zap, MessageSquare, RefreshCw,
   LogOut, User, ChevronRight, ChevronLeft, Menu, FlaskConical,
   GraduationCap, TrendingUp, CreditCard, Building2, BookOpen,
-  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star, LayoutTemplate,
+  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star, LayoutTemplate, Radio,
 } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.js";
@@ -29,6 +29,7 @@ const NAV_SECTIONS = [
       { href: "/automation",  icon: Zap,           label: "Automation" },
       { href: "/reengagement",icon: RefreshCw,     label: "Re-engagement" },
       { href: "/templates",   icon: LayoutTemplate, label: "WA Templates" },
+      { href: "/broadcasts",  icon: Radio,          label: "Broadcasts" },
     ],
   },
   {

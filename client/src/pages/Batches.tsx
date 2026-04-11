@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, Plus, Users, Calendar, Clock, AlertTriangle,
-  ChevronRight, Search, LayoutList, Trash2,
+  ChevronRight, Search, LayoutList, Trash2, Award,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
@@ -185,6 +185,12 @@ function BatchEnrollmentDialog({ batch, onClose }: { batch: any; onClose: () => 
     onError: (e: any) => toast.error(e?.message ?? "Enrollment failed"),
   });
 
+  const certMutation = useMutation({
+    mutationFn: (enrollmentId: string) => apiRequest<any>("POST", `/api/batches/enrollments/${enrollmentId}/issue-cert`),
+    onSuccess: () => { toast.success("Certificate issued & WhatsApp sent!"); qc.invalidateQueries({ queryKey: ["batch-enrollments", batch.id] }); },
+    onError: () => toast.error("Certificate issue failed"),
+  });
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -244,13 +250,25 @@ function BatchEnrollmentDialog({ batch, onClose }: { batch: any; onClose: () => 
                   <p className="font-medium text-sm truncate">{e.student_name}</p>
                   <p className="text-xs text-gray-500">{e.student_phone} · Enrolled {formatDate(e.enrolled_at)}</p>
                 </div>
-                <div className="text-right shrink-0">
-                  {parseFloat(e.fee_amount) > 0 && (
-                    <p className="text-xs font-semibold text-emerald-700">
-                      ₹{parseFloat(e.fee_paid ?? 0).toLocaleString("en-IN")} / ₹{parseFloat(e.fee_amount).toLocaleString("en-IN")}
-                    </p>
-                  )}
-                  {e.certificate_issued && <Badge className="bg-green-100 text-green-700 text-[10px]">Certified</Badge>}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    {parseFloat(e.fee_amount) > 0 && (
+                      <p className="text-xs font-semibold text-emerald-700">
+                        ₹{parseFloat(e.fee_paid ?? 0).toLocaleString("en-IN")} / ₹{parseFloat(e.fee_amount).toLocaleString("en-IN")}
+                      </p>
+                    )}
+                    {e.cert_no && <p className="text-[10px] text-gray-400">{e.cert_no}</p>}
+                  </div>
+                  {e.certificate_issued
+                    ? <Badge className="bg-green-100 text-green-700 text-[10px] flex items-center gap-1"><Award className="h-3 w-3" /> Certified</Badge>
+                    : (
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] px-2"
+                        onClick={() => certMutation.mutate(e.id)}
+                        disabled={certMutation.isPending}>
+                        <Award className="h-3 w-3" /> Issue Cert
+                      </Button>
+                    )
+                  }
                 </div>
               </div>
             ))}

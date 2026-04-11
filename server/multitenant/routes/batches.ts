@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { tenantFromHeader, authAndTenantGuard } from "../auth/tenantGuard.js";
+import { whatsappService } from "../services/whatsappService.js";
+import logger from "../logger.js";
 import type { TenantRequest } from "../types.js";
 
 const router = Router();
@@ -158,6 +160,57 @@ router.post("/:id/timetable", ...guard, async (req: TenantRequest, res) => {
 router.delete("/timetable/:sessionId", ...guard, async (req: TenantRequest, res) => {
   await req.db.query("DELETE FROM batch_sessions WHERE id=$1", [req.params.sessionId]);
   res.json({ ok: true });
+});
+
+// ─── POST /api/batches/enrollments/:enrollmentId/issue-cert ──
+router.post("/enrollments/:enrollmentId/issue-cert", ...guard, async (req: TenantRequest, res) => {
+  const user = (req as any).user as { id: string };
+
+  // Generate a cert number like CERT-2026-001234
+  const seqRow = await req.db.query("SELECT nextval('cert_seq') AS val");
+  const certNo = `CERT-${new Date().getFullYear()}-${String(seqRow.rows[0].val).padStart(6, "0")}`;
+
+  const row = await req.db.query(
+    `UPDATE enrollments
+       SET certificate_issued = TRUE,
+           cert_no            = $2,
+           cert_issued_by     = $3,
+           cert_issued_at     = now(),
+           completion_date    = COALESCE(completion_date, now())
+     WHERE id = $1
+     RETURNING *`,
+    [req.params.enrollmentId, certNo, user.id]
+  );
+  if (!row.rows.length) { res.status(404).json({ ok: false, message: "Enrollment not found" }); return; }
+
+  const enr = row.rows[0];
+
+  // Send WhatsApp congratulations
+  try {
+    const leadRow = await req.db.query(
+      `SELECT l.full_name, l.phone, b.name AS batch_name, c.name AS course_name
+       FROM leads l
+       JOIN enrollments e ON e.lead_id = l.id
+       JOIN batches b ON b.id = e.batch_id
+       LEFT JOIN courses c ON c.id = b.course_id
+       WHERE e.id = $1`,
+      [req.params.enrollmentId]
+    );
+    if (leadRow.rows[0]) {
+      const { full_name, phone, batch_name, course_name } = leadRow.rows[0];
+      const msg =
+        `🎓 Congratulations, ${full_name}!\n` +
+        `Your certificate for *${course_name ?? batch_name}* has been issued.\n` +
+        `Certificate No: *${certNo}*\n` +
+        `Date: ${new Date().toLocaleDateString("en-IN")}\n\n` +
+        `We are proud of your achievement. All the best for your future!`;
+      await whatsappService.sendText(phone, msg);
+    }
+  } catch (err) {
+    logger.warn({ enrollmentId: req.params.enrollmentId, err }, "Certificate WhatsApp failed");
+  }
+
+  res.json({ ok: true, data: enr });
 });
 
 export default router;

@@ -100,16 +100,56 @@ router.post("/", ...guard, async (req: TenantRequest, res) => {
 // ─── PATCH /api/payments/:id ─────────────────────────────────
 router.patch("/:id", ...guard, async (req: TenantRequest, res) => {
   const { status, notes, receipt_no } = req.body as Record<string, unknown>;
+
+  // Auto-generate receipt number when marking completed
+  const autoReceipt = (status === "completed" && !receipt_no)
+    ? `RCP-${Date.now()}`
+    : (receipt_no ?? null);
+
   const row = await req.db.query(
     `UPDATE payments
-     SET status = COALESCE($2, status),
-         notes  = COALESCE($3, notes),
-         receipt_no = COALESCE($4, receipt_no)
+     SET status     = COALESCE($2, status),
+         notes      = COALESCE($3, notes),
+         receipt_no = COALESCE($4, receipt_no),
+         paid_at    = CASE WHEN $2 = 'completed' AND paid_at IS NULL THEN now() ELSE paid_at END
      WHERE id = $1 RETURNING *`,
-    [req.params.id, status ?? null, notes ?? null, receipt_no ?? null]
+    [req.params.id, status ?? null, notes ?? null, autoReceipt]
   );
   if (!row.rows.length) { res.status(404).json({ ok: false, message: "Not found" }); return; }
-  res.json({ ok: true, data: row.rows[0] });
+
+  const payment = row.rows[0];
+
+  // Send WhatsApp receipt when payment is marked completed
+  if (status === "completed") {
+    try {
+      const leadRow = await req.db.query(
+        `SELECT l.full_name, l.phone,
+                COALESCE(SUM(p2.amount) FILTER (WHERE p2.status='completed'), 0) AS total_paid,
+                pp.total_fee - pp.discount AS net_fee
+         FROM leads l
+         LEFT JOIN payments p2 ON p2.lead_id = l.id
+         LEFT JOIN payment_plans pp ON pp.lead_id = l.id
+         WHERE l.id = $1
+         GROUP BY l.full_name, l.phone, pp.total_fee, pp.discount`,
+        [payment.lead_id]
+      );
+      if (leadRow.rows[0]) {
+        const { full_name, phone, total_paid, net_fee } = leadRow.rows[0];
+        const balance = net_fee ? Math.max(0, parseFloat(net_fee) - parseFloat(total_paid)) : null;
+        const msg =
+          `✅ Payment Received — Receipt #${payment.receipt_no}\n` +
+          `Name: ${full_name}\n` +
+          `Amount Paid: ₹${parseFloat(payment.amount).toLocaleString("en-IN")}\n` +
+          `Date: ${new Date().toLocaleDateString("en-IN")}\n` +
+          (balance !== null ? `Balance Due: ₹${balance.toLocaleString("en-IN")}\n` : "") +
+          `Method: ${payment.method}\n` +
+          `Thank you for your payment!`;
+        await whatsappService.sendText(phone, msg);
+      }
+    } catch (_) { /* Non-fatal */ }
+  }
+
+  res.json({ ok: true, data: payment });
 });
 
 // ─── DELETE /api/payments/:id ────────────────────────────────
@@ -313,7 +353,7 @@ router.patch("/installments/:id", ...guard, async (req: TenantRequest, res) => {
   const row = await req.db.query(
     `UPDATE payment_installments
      SET status     = COALESCE($2, status),
-         paid_at    = COALESCE($3::timestamptz, paid_at),
+         paid_at    = COALESCE($3::timestamptz, CASE WHEN $2='paid' THEN now() ELSE paid_at END),
          payment_id = COALESCE($4::uuid, payment_id),
          notes      = COALESCE($5, notes),
          updated_at = now()
@@ -321,7 +361,47 @@ router.patch("/installments/:id", ...guard, async (req: TenantRequest, res) => {
     [req.params.id, status ?? null, paid_at ?? null, payment_id ?? null, notes ?? null]
   );
   if (!row.rows.length) { res.status(404).json({ ok: false, message: "Not found" }); return; }
-  res.json({ ok: true, data: row.rows[0] });
+
+  const inst = row.rows[0];
+
+  // Send WhatsApp receipt when installment is marked paid
+  if (status === "paid") {
+    try {
+      const info = await req.db.query(
+        `SELECT l.full_name, l.phone,
+                pi2.installment_no AS inst_no,
+                (SELECT COUNT(*) FROM payment_installments WHERE plan_id = pi2.plan_id) AS total_insts,
+                (SELECT COUNT(*) FROM payment_installments WHERE plan_id = pi2.plan_id AND status='pending') AS remaining,
+                pp.total_fee - pp.discount AS net_fee,
+                COALESCE(SUM(pi3.amount) FILTER (WHERE pi3.status='paid'), 0) AS total_paid
+         FROM payment_installments pi2
+         JOIN leads l ON l.id = pi2.lead_id
+         LEFT JOIN payment_plans pp ON pp.id = pi2.plan_id
+         LEFT JOIN payment_installments pi3 ON pi3.plan_id = pi2.plan_id
+         WHERE pi2.id = $1
+         GROUP BY l.full_name, l.phone, pi2.installment_no, pi2.plan_id, pp.total_fee, pp.discount`,
+        [req.params.id]
+      );
+      if (info.rows[0]) {
+        const { full_name, phone, inst_no, total_insts, remaining, net_fee, total_paid } = info.rows[0];
+        const balance = net_fee ? Math.max(0, parseFloat(net_fee) - parseFloat(total_paid)).toLocaleString("en-IN") : null;
+        const autoReceiptNo = `INST-${Date.now()}`;
+        const msg =
+          `✅ Installment ${inst_no}/${total_insts} Received\n` +
+          `Name: ${full_name}\n` +
+          `Amount: ₹${parseFloat(inst.amount).toLocaleString("en-IN")}\n` +
+          `Date: ${new Date().toLocaleDateString("en-IN")}\n` +
+          `Receipt: ${autoReceiptNo}\n` +
+          (balance !== null && parseInt(String(remaining)) > 0
+            ? `Balance: ₹${balance} (${remaining} installment${parseInt(String(remaining)) > 1 ? "s" : ""} remaining)\n`
+            : `All installments complete! 🎉\n`) +
+          `Thank you for your payment!`;
+        await whatsappService.sendText(phone, msg);
+      }
+    } catch (_) { /* Non-fatal */ }
+  }
+
+  res.json({ ok: true, data: inst });
 });
 
 export default router;

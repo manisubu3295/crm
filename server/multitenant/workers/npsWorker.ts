@@ -6,8 +6,8 @@ import logger from "../logger.js";
 
 /**
  * NPS Worker — runs daily at 10 AM IST.
- * Finds enrollments where completion_date = yesterday and no NPS already sent.
- * Sends WhatsApp survey and records the nps_responses row.
+ * Step 1: Auto-complete enrollments where batch end_date has passed and completion_date is not set.
+ * Step 2: Finds newly completed enrollments and sends NPS WhatsApp survey.
  */
 export function startNpsWorker() {
   const worker = new Worker(
@@ -17,9 +17,25 @@ export function startNpsWorker() {
       const { tenantId } = job.data as { tenantId: string };
       const db = getTenantDb(tenantId);
 
-      // Find completions from yesterday without an NPS response
+      // ── Step 1: Auto-complete enrollments for expired batches ─────────────
+      const autoCompleted = await db.query(
+        `UPDATE enrollments e
+         SET completion_date = b.end_date
+         FROM batches b
+         WHERE e.batch_id = b.id
+           AND b.end_date IS NOT NULL
+           AND b.end_date::date < CURRENT_DATE
+           AND e.completion_date IS NULL
+         RETURNING e.lead_id, e.batch_id, b.course_id`
+      );
+
+      if (autoCompleted.rowCount && autoCompleted.rowCount > 0) {
+        logger.info({ tenantId, count: autoCompleted.rowCount }, "Auto-completed enrollments for expired batches");
+      }
+
+      // ── Step 2: Send NPS survey for completions from yesterday ────────────
       const completions = await db.query(
-        `SELECT e.lead_id, e.batch_id, b.course_id,
+        `SELECT e.lead_id, e.batch_id, e.id AS enrollment_id, b.course_id,
                 l.full_name, l.phone
          FROM enrollments e
          JOIN leads l ON l.id = e.lead_id
