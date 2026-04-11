@@ -146,6 +146,47 @@ router.post("/:id/merge", ...guard, async (req: TenantRequest, res) => {
   res.json({ ok: true, data: result });
 });
 
+// ─── GET /api/leads/:id/interests — multi-course interests ──────────────────
+router.get("/:id/interests", ...guard, async (req: TenantRequest, res) => {
+  const rows = await req.db.query(
+    `SELECT o.*, c.name AS course_name, c.fee AS course_fee
+     FROM opportunities o
+     LEFT JOIN courses c ON c.id = o.course_id
+     WHERE o.lead_id = $1
+     ORDER BY o.created_at ASC`,
+    [req.params.id]
+  );
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── POST /api/leads/:id/interests ──────────────────────────────────────────
+router.post("/:id/interests", ...guard, async (req: TenantRequest, res) => {
+  const { course_id, stage = "new", expected_fee, probability = 0 } = req.body as Record<string, unknown>;
+  if (!course_id) { res.status(400).json({ ok: false, message: "course_id required" }); return; }
+
+  // Upsert — only one record per lead+course
+  const row = await req.db.query(
+    `INSERT INTO opportunities (lead_id, course_id, stage, expected_fee, probability)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT DO NOTHING
+     RETURNING *`,
+    [req.params.id, course_id, stage, expected_fee ?? null, probability]
+  );
+  if (!row.rows.length) {
+    res.status(409).json({ ok: false, message: "Already tracking this course" }); return;
+  }
+  res.status(201).json({ ok: true, data: row.rows[0] });
+});
+
+// ─── DELETE /api/leads/:id/interests/:oId ───────────────────────────────────
+router.delete("/:id/interests/:oId", ...guard, async (req: TenantRequest, res) => {
+  await req.db.query(
+    "DELETE FROM opportunities WHERE id=$1 AND lead_id=$2",
+    [req.params.oId, req.params.id]
+  );
+  res.json({ ok: true });
+});
+
 // ─── GET /api/leads/:id/referrals — leads referred by this person ────────────
 router.get("/:id/referrals", ...guard, async (req: TenantRequest, res) => {
   const rows = await req.db.query(

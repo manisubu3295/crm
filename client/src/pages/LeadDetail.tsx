@@ -148,6 +148,9 @@ export function LeadDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Multi-Course Interests */}
+          <CourseInterestsCard leadId={id} interests={lead.courseInterests ?? []} />
+
           {/* Referral Info */}
           <ReferralCard leadId={id} referrer={lead.referrer} referrals={lead.referrals ?? []} />
 
@@ -214,6 +217,67 @@ export function LeadDetailPage() {
       {/* Add Task Dialog */}
       <AddTaskDialog open={showTask} onClose={() => setShowTask(false)} leadId={id} assignedTo={lead.assigned_to} />
     </AppShell>
+  );
+}
+
+// ─── Course Interests Card ────────────────────────────────────
+function CourseInterestsCard({ leadId, interests }: { leadId: string; interests: any[] }) {
+  const qc = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+
+  const { data: coursesData } = useQuery({
+    queryKey: ["courses-list"],
+    queryFn: () => apiRequest<any>("GET", "/api/admin/courses"),
+    staleTime: 300_000,
+  });
+  const courses: any[] = coursesData?.data ?? [];
+
+  const removeMutation = useMutation({
+    mutationFn: (oId: string) => apiRequest<any>("DELETE", `/api/leads/${leadId}/interests/${oId}`),
+    onSuccess: () => { toast.success("Removed"); qc.invalidateQueries({ queryKey: ["lead", leadId] }); },
+    onError: () => toast.error("Failed to remove"),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (courseId: string) => apiRequest<any>("POST", `/api/leads/${leadId}/interests`, { course_id: courseId }),
+    onSuccess: () => { toast.success("Course interest added"); qc.invalidateQueries({ queryKey: ["lead", leadId] }); setShowAdd(false); },
+    onError: (err: any) => toast.error(err?.message ?? "Already tracking"),
+  });
+
+  const existingIds = new Set(interests.map((i: any) => i.course_id));
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm">Course Interests</CardTitle>
+        <button onClick={() => setShowAdd((v) => !v)} className="text-xs text-blue-600 hover:underline">+ Add</button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {interests.length === 0 && !showAdd && (
+          <p className="text-xs text-gray-400">No course interests tracked yet</p>
+        )}
+        {interests.map((i: any) => (
+          <div key={i.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+            <div>
+              <p className="text-xs font-medium">{i.course_name}</p>
+              {i.course_fee && <p className="text-[10px] text-gray-400">Fee: ₹{parseFloat(i.course_fee).toLocaleString("en-IN")}</p>}
+            </div>
+            <button onClick={() => removeMutation.mutate(i.id)} className="text-[10px] text-red-500 hover:underline">Remove</button>
+          </div>
+        ))}
+        {showAdd && (
+          <div className="mt-2 space-y-1">
+            {courses.filter((c: any) => !existingIds.has(c.id) && c.is_active).map((c: any) => (
+              <button key={c.id} onClick={() => addMutation.mutate(c.id)}
+                className="flex w-full items-center justify-between rounded-lg border px-3 py-1.5 hover:bg-blue-50/50 text-left">
+                <span className="text-xs font-medium">{c.name}</span>
+                {c.fee && <span className="text-[10px] text-gray-400">₹{parseFloat(c.fee).toLocaleString("en-IN")}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

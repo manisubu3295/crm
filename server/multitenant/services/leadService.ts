@@ -65,7 +65,7 @@ export const leadService = {
   },
 
   async getById(db: Pool, id: string) {
-    const [lead, stageHistory, tasks, comms, referrer, referrals] = await Promise.all([
+    const [lead, stageHistory, tasks, comms, referrer, referrals, interests] = await Promise.all([
       db.query(
         `SELECT l.*, u.full_name AS assigned_to_name, c.name AS course_name, camp.name AS campaign_name
          FROM leads l
@@ -97,6 +97,13 @@ export const leadService = {
         "SELECT id, full_name, phone, stage, admitted_at FROM leads WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 10",
         [id]
       ),
+      // Multi-course interests
+      db.query(
+        `SELECT o.*, c.name AS course_name, c.fee AS course_fee
+         FROM opportunities o LEFT JOIN courses c ON c.id = o.course_id
+         WHERE o.lead_id = $1 ORDER BY o.created_at ASC`,
+        [id]
+      ),
     ]);
 
     if (!lead.rows[0]) return null;
@@ -108,6 +115,7 @@ export const leadService = {
       communications: comms.rows,
       referrer: referrer.rows[0] ?? null,
       referrals: referrals.rows,
+      courseInterests: interests.rows,
     };
   },
 
