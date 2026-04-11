@@ -123,4 +123,41 @@ router.patch("/enrollments/:enrollmentId", ...guard, async (req: TenantRequest, 
   res.json({ ok: true, data: row.rows[0] });
 });
 
+// ─── GET /api/batches/:id/timetable ──────────────────────────
+router.get("/:id/timetable", ...guard, async (req: TenantRequest, res) => {
+  const rows = await req.db.query(
+    `SELECT bs.*, u.full_name AS trainer_name
+     FROM batch_sessions bs
+     LEFT JOIN users u ON u.id = bs.trainer_id
+     WHERE bs.batch_id = $1
+     ORDER BY bs.day_of_week, bs.start_time`,
+    [req.params.id]
+  );
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── POST /api/batches/:id/timetable ─────────────────────────
+router.post("/:id/timetable", ...guard, async (req: TenantRequest, res) => {
+  const { day_of_week, start_time, end_time, topic, trainer_id, location, notes } =
+    req.body as Record<string, unknown>;
+
+  if (day_of_week === undefined || !start_time || !end_time) {
+    res.status(400).json({ ok: false, message: "day_of_week, start_time, end_time required" }); return;
+  }
+
+  const row = await req.db.query(
+    `INSERT INTO batch_sessions (batch_id, day_of_week, start_time, end_time, topic, trainer_id, location, notes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [req.params.id, day_of_week, start_time, end_time, topic ?? null,
+     trainer_id ?? null, location ?? null, notes ?? null]
+  );
+  res.status(201).json({ ok: true, data: row.rows[0] });
+});
+
+// ─── DELETE /api/batches/timetable/:sessionId ─────────────────
+router.delete("/timetable/:sessionId", ...guard, async (req: TenantRequest, res) => {
+  await req.db.query("DELETE FROM batch_sessions WHERE id=$1", [req.params.sessionId]);
+  res.json({ ok: true });
+});
+
 export default router;

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen, Plus, Users, Calendar, Clock, AlertTriangle,
-  ChevronRight, Search,
+  ChevronRight, Search, LayoutList, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
@@ -32,7 +32,8 @@ const MODE_LABELS: Record<string, string> = { offline: "Offline", online: "Onlin
 export function BatchesPage() {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const [selectedBatch,   setSelectedBatch]   = useState<any>(null);
+  const [timetableBatch, setTimetableBatch] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
 
@@ -126,7 +127,10 @@ export function BatchesPage() {
 
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setSelectedBatch(b)}>
-                      <Users className="h-3.5 w-3.5" /> View Students
+                      <Users className="h-3.5 w-3.5" /> Students
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setTimetableBatch(b)}>
+                      <LayoutList className="h-3.5 w-3.5" /> Timetable
                     </Button>
                     <Button size="sm" variant="ghost" className="text-xs"
                       onClick={() => toggleActive.mutate({ id: b.id, is_active: !b.is_active })}>
@@ -150,6 +154,7 @@ export function BatchesPage() {
       )}
 
       {selectedBatch && <BatchEnrollmentDialog batch={selectedBatch} onClose={() => setSelectedBatch(null)} />}
+      {timetableBatch && <TimetableDialog batch={timetableBatch} onClose={() => setTimetableBatch(null)} />}
     </AppShell>
   );
 }
@@ -304,6 +309,116 @@ function BatchFormDialog({ courses, onClose, onSave, loading }: {
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={() => onSave({ ...f, capacity: parseInt(f.capacity) })}
             disabled={loading || !f.course_id || !f.name}>{loading ? "Saving…" : "Create Batch"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Timetable Dialog ─────────────────────────────────────────
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function TimetableDialog({ batch, onClose }: { batch: any; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState({ day_of_week: "1", start_time: "", end_time: "", topic: "", location: "" });
+  const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["timetable", batch.id],
+    queryFn: () => apiRequest<any>("GET", `/api/batches/${batch.id}/timetable`),
+  });
+  const sessions: any[] = data?.data ?? [];
+
+  const grouped = DAYS.reduce<Record<number, any[]>>((acc, _, i) => {
+    acc[i] = sessions.filter((s) => s.day_of_week === i);
+    return acc;
+  }, {} as Record<number, any[]>);
+
+  const addMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => apiRequest<any>("POST", `/api/batches/${batch.id}/timetable`, body),
+    onSuccess: () => { toast.success("Session added"); qc.invalidateQueries({ queryKey: ["timetable", batch.id] }); setForm({ day_of_week: "1", start_time: "", end_time: "", topic: "", location: "" }); },
+    onError: () => toast.error("Failed to add session"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (sessionId: string) => apiRequest<any>("DELETE", `/api/batches/timetable/${sessionId}`),
+    onSuccess: () => { toast.success("Session removed"); qc.invalidateQueries({ queryKey: ["timetable", batch.id] }); },
+  });
+
+  const handleAdd = () => {
+    if (!form.start_time || !form.end_time) { toast.error("Start and end time required"); return; }
+    addMutation.mutate({ ...form, day_of_week: parseInt(form.day_of_week) });
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{batch.name} — Class Timetable</DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="py-8 text-center text-gray-400">Loading…</div>
+        ) : (
+          <div className="space-y-3 mb-4">
+            {DAYS.map((day, i) => (
+              grouped[i].length > 0 && (
+                <div key={i} className="rounded-lg border overflow-hidden">
+                  <div className="bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">{day}</div>
+                  {grouped[i].map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 px-3 py-2 bg-white hover:bg-gray-50 border-t first:border-t-0">
+                      <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      <span className="text-sm font-mono">{s.start_time} – {s.end_time}</span>
+                      {s.topic && <span className="text-sm text-gray-700 flex-1 truncate">{s.topic}</span>}
+                      {s.location && <span className="text-xs text-gray-400 truncate max-w-[100px]">{s.location}</span>}
+                      {s.trainer_name && <span className="text-xs text-indigo-600 truncate max-w-[100px]">{s.trainer_name}</span>}
+                      <button onClick={() => deleteMutation.mutate(s.id)} className="ml-auto text-red-400 hover:text-red-600 shrink-0">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )
+            ))}
+            {sessions.length === 0 && (
+              <div className="py-8 text-center text-gray-400">
+                <Calendar className="mx-auto h-8 w-8 text-gray-200 mb-2" />
+                <p>No sessions scheduled yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="rounded-lg border p-4 bg-gray-50">
+          <p className="text-sm font-medium mb-3">Add Session</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <Label className="text-xs">Day</Label>
+              <Select value={form.day_of_week} onValueChange={(v) => set("day_of_week", v)}>
+                <SelectTrigger className="mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>{DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Topic</Label>
+              <Input className="mt-1 h-8 text-xs" value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Module 1" />
+            </div>
+            <div>
+              <Label className="text-xs">Start Time</Label>
+              <Input className="mt-1 h-8 text-xs" type="time" value={form.start_time} onChange={(e) => set("start_time", e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">End Time</Label>
+              <Input className="mt-1 h-8 text-xs" type="time" value={form.end_time} onChange={(e) => set("end_time", e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Location / Room</Label>
+              <Input className="mt-1 h-8 text-xs" value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="Room A / Zoom link" />
+            </div>
+          </div>
+          <Button size="sm" onClick={handleAdd} disabled={addMutation.isPending}>
+            <Plus className="h-3.5 w-3.5" /> {addMutation.isPending ? "Adding…" : "Add Session"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
