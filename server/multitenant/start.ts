@@ -35,9 +35,11 @@ async function main() {
       { startFollowUpWorker },
       { startReEngagementWorker },
       { startInstallmentWorker },
+      { startNpsWorker },
       { startSlaCron },
       { startReEngagementCron },
       { startInstallmentCron },
+      { startNpsCron },
     ] = await Promise.all([
       import("./workers/automationWorker.js"),
       import("./workers/communicationWorker.js"),
@@ -45,9 +47,11 @@ async function main() {
       import("./workers/followUpWorker.js"),
       import("./workers/reEngagementWorker.js"),
       import("./workers/installmentWorker.js"),
+      import("./workers/npsWorker.js"),
       import("./queues/slaQueue.js"),
       import("./queues/reEngagementQueue.js"),
       import("./queues/installmentQueue.js"),
+      import("./queues/npsQueue.js"),
     ]);
 
     workers.push(
@@ -57,6 +61,7 @@ async function main() {
       startFollowUpWorker(),
       startReEngagementWorker(),
       startInstallmentWorker(),
+      startNpsWorker(),
     );
     logger.info({ count: workers.length }, "BullMQ workers started");
 
@@ -65,6 +70,7 @@ async function main() {
       startSlaCron(tenantIds),
       startReEngagementCron(tenantIds),
       startInstallmentCron(tenantIds),
+      startNpsCron(tenantIds),
     ]);
     logger.info("CRON jobs scheduled");
   } else {

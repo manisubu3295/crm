@@ -5,7 +5,7 @@ import {
   BarChart2, Settings, Zap, MessageSquare, RefreshCw,
   LogOut, User, ChevronRight, ChevronLeft, Menu, FlaskConical,
   GraduationCap, TrendingUp, CreditCard, Building2, BookOpen,
-  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase,
+  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star,
 } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.js";
@@ -53,6 +53,7 @@ const NAV_SECTIONS = [
       { href: "/batches",     icon: BookOpen,       label: "Batches" },
       { href: "/attendance",  icon: ClipboardCheck, label: "Attendance" },
       { href: "/placements",  icon: Briefcase,      label: "Placements" },
+      { href: "/nps",         icon: Star,           label: "NPS & Feedback" },
     ],
   },
 ];
