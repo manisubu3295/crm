@@ -134,30 +134,131 @@ router.get("/by-lead/:leadId", ...guard, async (req: TenantRequest, res) => {
 
 // ─── POST /api/payments/plans ────────────────────────────────
 router.post("/plans", ...guard, async (req: TenantRequest, res) => {
-  const { lead_id, total_fee, discount = 0, installments = 1, notes } = req.body as Record<string, unknown>;
+  const { lead_id, total_fee, discount = 0, installments = 1, notes,
+          first_due_date, installment_amounts } = req.body as Record<string, unknown>;
   if (!lead_id || !total_fee) {
     res.status(400).json({ ok: false, message: "lead_id and total_fee required" });
     return;
   }
-  const row = await req.db.query(
-    `INSERT INTO payment_plans (lead_id, total_fee, discount, installments, notes)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT DO NOTHING
-     RETURNING *`,
-    [lead_id, total_fee, discount, installments, notes ?? null]
-  );
-  if (!row.rows.length) {
-    // update existing
+
+  let plan: any;
+  const existing = await req.db.query("SELECT id FROM payment_plans WHERE lead_id=$1 LIMIT 1", [lead_id]);
+  if (existing.rows.length) {
     const upd = await req.db.query(
-      `UPDATE payment_plans
-       SET total_fee=$2, discount=$3, installments=$4, notes=COALESCE($5,notes), updated_at=now()
+      `UPDATE payment_plans SET total_fee=$2, discount=$3, installments=$4, notes=COALESCE($5,notes), updated_at=now()
        WHERE lead_id=$1 RETURNING *`,
       [lead_id, total_fee, discount, installments, notes ?? null]
     );
-    res.json({ ok: true, data: upd.rows[0] });
-    return;
+    plan = upd.rows[0];
+  } else {
+    const ins = await req.db.query(
+      `INSERT INTO payment_plans (lead_id, total_fee, discount, installments, notes)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [lead_id, total_fee, discount, installments, notes ?? null]
+    );
+    plan = ins.rows[0];
   }
-  res.status(201).json({ ok: true, data: row.rows[0] });
+
+  // Auto-generate installment schedule if first_due_date provided
+  if (first_due_date && parseInt(String(installments)) > 0) {
+    const n = parseInt(String(installments));
+    const net = parseFloat(String(total_fee)) - parseFloat(String(discount));
+    const customAmts = Array.isArray(installment_amounts) ? installment_amounts as number[] : [];
+    const perInstallment = net / n;
+
+    // Delete old schedule and rebuild
+    await req.db.query("DELETE FROM payment_installments WHERE plan_id = $1", [plan.id]);
+
+    const values: string[] = [];
+    const params: unknown[] = [];
+    let p = 1;
+    for (let i = 0; i < n; i++) {
+      const dueDate = new Date(String(first_due_date));
+      dueDate.setMonth(dueDate.getMonth() + i);
+      const amt = customAmts[i] ?? perInstallment;
+      values.push(`($${p++},$${p++},$${p++},$${p++},$${p++})`);
+      params.push(plan.id, lead_id, i + 1, amt.toFixed(2), dueDate.toISOString().slice(0, 10));
+    }
+    if (values.length) {
+      await req.db.query(
+        `INSERT INTO payment_installments (plan_id, lead_id, installment_no, amount, due_date)
+         VALUES ${values.join(",")}`,
+        params
+      );
+    }
+  }
+
+  res.status(201).json({ ok: true, data: plan });
+});
+
+// ─── GET /api/payments/installments?leadId= ──────────────────
+router.get("/installments", ...guard, async (req: TenantRequest, res) => {
+  const { leadId } = req.query as { leadId?: string };
+  if (!leadId) { res.status(400).json({ ok: false, message: "leadId required" }); return; }
+  const rows = await req.db.query(
+    `SELECT pi.*, p.receipt_no
+     FROM payment_installments pi
+     LEFT JOIN payments p ON p.id = pi.payment_id
+     WHERE pi.lead_id = $1
+     ORDER BY pi.installment_no`,
+    [leadId]
+  );
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── GET /api/payments/dues — upcoming & overdue dashboard ───
+router.get("/dues", ...guard, async (req: TenantRequest, res) => {
+  const { days = "7" } = req.query as { days?: string };
+  const d = Math.min(30, Math.max(1, parseInt(days)));
+
+  const [overdue, upcoming] = await Promise.all([
+    req.db.query(
+      `SELECT pi.*, l.full_name AS lead_name, l.phone AS lead_phone,
+              u.full_name AS counsellor_name
+       FROM payment_installments pi
+       JOIN leads l ON l.id = pi.lead_id
+       LEFT JOIN users u ON u.id = l.assigned_to
+       WHERE pi.status = 'pending' AND pi.due_date < CURRENT_DATE
+       ORDER BY pi.due_date ASC LIMIT 100`
+    ),
+    req.db.query(
+      `SELECT pi.*, l.full_name AS lead_name, l.phone AS lead_phone,
+              u.full_name AS counsellor_name
+       FROM payment_installments pi
+       JOIN leads l ON l.id = pi.lead_id
+       LEFT JOIN users u ON u.id = l.assigned_to
+       WHERE pi.status = 'pending'
+         AND pi.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + ($1 || ' days')::INTERVAL
+       ORDER BY pi.due_date ASC LIMIT 100`,
+      [d]
+    ),
+  ]);
+
+  const overdueAmt = overdue.rows.reduce((s: number, r: any) => s + parseFloat(r.amount), 0);
+  const upcomingAmt = upcoming.rows.reduce((s: number, r: any) => s + parseFloat(r.amount), 0);
+
+  res.json({
+    ok: true,
+    data: { overdue: overdue.rows, upcoming: upcoming.rows },
+    meta: { overdueAmt, upcomingAmt, overdueCount: overdue.rowCount, upcomingCount: upcoming.rowCount },
+  });
+});
+
+// ─── PATCH /api/payments/installments/:id ────────────────────
+router.patch("/installments/:id", ...guard, async (req: TenantRequest, res) => {
+  const { status, paid_at, payment_id, notes } = req.body as Record<string, unknown>;
+  const row = await req.db.query(
+    `UPDATE payment_installments
+     SET status     = COALESCE($2, status),
+         paid_at    = COALESCE($3::timestamptz, paid_at),
+         payment_id = COALESCE($4::uuid, payment_id),
+         notes      = COALESCE($5, notes),
+         updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [req.params.id, status ?? null, paid_at ?? null, payment_id ?? null, notes ?? null]
+  );
+  if (!row.rows.length) { res.status(404).json({ ok: false, message: "Not found" }); return; }
+  res.json({ ok: true, data: row.rows[0] });
 });
 
 export default router;

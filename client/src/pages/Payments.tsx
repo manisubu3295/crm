@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { IndianRupee, Plus, TrendingUp, Clock, CheckCircle2, XCircle, Search } from "lucide-react";
+import { IndianRupee, Plus, TrendingUp, Clock, CheckCircle2, AlertTriangle, Search, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.js";
@@ -77,18 +77,28 @@ export function PaymentsPage() {
     onError: () => toast.error("Failed to record payment"),
   });
 
+  const { data: duesData } = useQuery({
+    queryKey: ["payment-dues"],
+    queryFn: () => apiRequest<any>("GET", "/api/payments/dues?days=7"),
+    staleTime: 60_000,
+  });
+  const dues = duesData?.data ?? { overdue: [], upcoming: [] };
+  const duesMeta = duesData?.meta ?? {};
+
   const KPIS = [
     { label: "Today's Collection", value: `₹${fmt(stats?.today)}`, icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-50" },
     { label: "This Month", value: `₹${fmt(stats?.this_month)}`, icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50" },
     { label: "All Time", value: `₹${fmt(stats?.all_time)}`, icon: CheckCircle2, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { label: "Pending Amount", value: `₹${fmt(stats?.pending_amount)}`, icon: Clock, color: "text-amber-600", bg: "bg-amber-50",
-      sub: `${stats?.pending_count ?? 0} records` },
+    { label: "Overdue Dues", value: `₹${fmt(duesMeta.overdueAmt)}`, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50",
+      sub: `${duesMeta.overdueCount ?? 0} installments` },
+    { label: "Due This Week", value: `₹${fmt(duesMeta.upcomingAmt)}`, icon: Clock, color: "text-amber-600", bg: "bg-amber-50",
+      sub: `${duesMeta.upcomingCount ?? 0} installments` },
   ];
 
   return (
     <AppShell title="Payments & Revenue">
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5 mb-6">
         {KPIS.map((k) => (
           <Card key={k.label} className="border-0 shadow-sm">
             <CardContent className="p-5 flex items-start justify-between">
@@ -130,6 +140,60 @@ export function PaymentsPage() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Dues Panel */}
+      {(dues.overdue.length > 0 || dues.upcoming.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 mb-6 lg:grid-cols-2">
+          {dues.overdue.length > 0 && (
+            <Card className="border-0 shadow-sm border-l-4 border-l-red-500">
+              <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <CardTitle className="text-sm text-red-700">Overdue Installments ({dues.overdue.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-56 overflow-y-auto">
+                  {dues.overdue.map((d: any) => (
+                    <div key={d.id} className="flex items-center justify-between px-4 py-2 border-b last:border-0 hover:bg-red-50/40">
+                      <div>
+                        <p className="text-xs font-medium">{d.lead_name}</p>
+                        <p className="text-[10px] text-gray-400">{d.lead_phone} · {d.counsellor_name ?? "—"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-red-600">₹{fmt(d.amount)}</p>
+                        <p className="text-[10px] text-gray-400">Inst #{d.installment_no} · Due {formatDate(d.due_date)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {dues.upcoming.length > 0 && (
+            <Card className="border-0 shadow-sm border-l-4 border-l-amber-400">
+              <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-amber-500" />
+                <CardTitle className="text-sm text-amber-700">Due This Week ({dues.upcoming.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-56 overflow-y-auto">
+                  {dues.upcoming.map((d: any) => (
+                    <div key={d.id} className="flex items-center justify-between px-4 py-2 border-b last:border-0 hover:bg-amber-50/40">
+                      <div>
+                        <p className="text-xs font-medium">{d.lead_name}</p>
+                        <p className="text-[10px] text-gray-400">{d.lead_phone} · {d.counsellor_name ?? "—"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-amber-700">₹{fmt(d.amount)}</p>
+                        <p className="text-[10px] text-gray-400">Inst #{d.installment_no} · Due {formatDate(d.due_date)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <Card className="border-0 shadow-sm">
@@ -214,7 +278,11 @@ function NewPaymentDialog({ onClose, onSave, loading }: { onClose: () => void; o
   const [form, setForm] = useState({
     amount: "", method: "cash", status: "completed", receipt_no: "", installment_no: "1",
     paid_at: new Date().toISOString().slice(0, 10), notes: "",
+    // plan fields
+    total_fee: "", discount: "0", installments: "1",
+    first_due_date: new Date().toISOString().slice(0, 10),
   });
+  const [showPlan, setShowPlan] = useState(false);
 
   const { data: leadsData } = useQuery({
     queryKey: ["leads-search", leadSearch],
@@ -225,9 +293,28 @@ function NewPaymentDialog({ onClose, onSave, loading }: { onClose: () => void; o
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  const qc = useQueryClient();
+  const planMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => apiRequest<any>("POST", "/api/payments/plans", body),
+    onSuccess: () => {
+      toast.success("Payment plan + installment schedule saved");
+      qc.invalidateQueries({ queryKey: ["payment-dues"] });
+    },
+    onError: () => toast.error("Failed to save plan"),
+  });
+
   const handleSave = () => {
     if (!selectedLead) { toast.error("Select a student"); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast.error("Enter valid amount"); return; }
+    if (showPlan && form.total_fee && parseFloat(form.total_fee) > 0) {
+      planMutation.mutate({
+        lead_id: selectedLead.id,
+        total_fee: parseFloat(form.total_fee),
+        discount: parseFloat(form.discount || "0"),
+        installments: parseInt(form.installments || "1"),
+        first_due_date: form.first_due_date,
+      });
+    }
     onSave({
       lead_id: selectedLead.id,
       amount: parseFloat(form.amount),
@@ -321,6 +408,39 @@ function NewPaymentDialog({ onClose, onSave, loading }: { onClose: () => void; o
           <div>
             <Label>Notes</Label>
             <Textarea className="mt-1" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" />
+          </div>
+
+          {/* Optional plan + installment schedule */}
+          <div className="border rounded-lg p-3 bg-gray-50/60">
+            <button type="button" className="flex items-center gap-2 text-xs font-medium text-blue-600"
+              onClick={() => setShowPlan((v) => !v)}>
+              <CalendarClock className="h-3.5 w-3.5" />
+              {showPlan ? "Hide" : "Set up"} payment plan &amp; installment schedule
+            </button>
+            {showPlan && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Total Fee (₹)</Label>
+                  <Input type="number" className="mt-1" value={form.total_fee} onChange={(e) => set("total_fee", e.target.value)} placeholder="e.g. 25000" />
+                </div>
+                <div>
+                  <Label className="text-xs">Discount (₹)</Label>
+                  <Input type="number" className="mt-1" value={form.discount} onChange={(e) => set("discount", e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">No. of Installments</Label>
+                  <Input type="number" min="1" max="24" className="mt-1" value={form.installments} onChange={(e) => set("installments", e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs">First Due Date</Label>
+                  <Input type="date" className="mt-1" value={form.first_due_date} onChange={(e) => set("first_due_date", e.target.value)} />
+                </div>
+                <p className="col-span-2 text-[10px] text-gray-400">
+                  Each installment = ₹{fmt((parseFloat(form.total_fee||"0") - parseFloat(form.discount||"0")) / Math.max(1, parseInt(form.installments||"1")))}
+                  &nbsp;· Due dates auto-calculated monthly from first due date.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

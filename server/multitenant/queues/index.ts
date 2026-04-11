@@ -4,3 +4,4 @@ export { communicationQueue } from "./communicationQueue.js";
 export { followUpQueue }      from "./followUpQueue.js";
 export { startSlaCron }       from "./slaQueue.js";
 export { startReEngagementCron } from "./reEngagementQueue.js";
+export { startInstallmentCron }  from "./installmentQueue.js";
