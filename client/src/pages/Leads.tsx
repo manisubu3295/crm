@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Plus, Search, Upload, Phone, Mail, UserPlus, X, Flame } from "lucide-react";
+import { Plus, Search, Upload, Phone, Mail, UserPlus, X, Flame, ArrowRightLeft } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell } from "../components/layout/AppShell.js";

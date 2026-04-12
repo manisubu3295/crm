@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { getRedisConnection } from "../queues/redisClient.js";
-import { getTenantDb } from "../db/tenantDb.js";
+import { getPool } from "../tenant/dbPool.js";
 import { whatsappService } from "../services/whatsappService.js";
 import logger from "../logger.js";
 
@@ -15,7 +15,7 @@ export function startNpsWorker() {
     async (job) => {
       if (job.name !== "nps-scan") return;
       const { tenantId } = job.data as { tenantId: string };
-      const db = getTenantDb(tenantId);
+      const db = await getPool(tenantId);
 
       // ── Step 1: Auto-complete enrollments for expired batches ─────────────
       const autoCompleted = await db.query(

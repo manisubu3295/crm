@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Send, Plus, Users, CheckCircle2, XCircle, Clock, Radio,
@@ -18,7 +19,7 @@ import { Progress } from "../components/ui/progress.js";
 import { apiRequest } from "../lib/queryClient.js";
 import { formatDate } from "../lib/utils.js";
 
-const STATUS_META: Record<string, { label: string; color: string; icon: JSX.Element }> = {
+const STATUS_META: Record<string, { label: string; color: string; icon: ReactNode }> = {
   draft:     { label: "Draft",     color: "bg-gray-100 text-gray-600",       icon: <Clock        className="h-3 w-3" /> },
   queued:    { label: "Queued",    color: "bg-amber-100 text-amber-700",     icon: <Clock        className="h-3 w-3" /> },
   running:   { label: "Sending…",  color: "bg-blue-100 text-blue-700",       icon: <Radio        className="h-3 w-3" /> },
@@ -68,7 +69,7 @@ export function BroadcastsPage() {
       ) : (
         <div className="space-y-3">
           {broadcasts.map((b) => {
-            const meta = STATUS_META[b.status] ?? STATUS_META.draft;
+            const meta = STATUS_META[b.status] ?? STATUS_META["draft"]!;
             const sentPct = b.total_count > 0 ? Math.round((b.sent_count / b.total_count) * 100) : 0;
             const isOpen = expanded === b.id;
 

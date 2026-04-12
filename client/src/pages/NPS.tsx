@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Star, TrendingUp, ThumbsUp, ThumbsDown, Minus, Send, Search } from "lucide-react";
 import { AppShell } from "../components/layout/AppShell.js";
@@ -16,7 +17,7 @@ const SCORE_COLOR = (score: number) => {
   return "bg-red-100 text-red-700";
 };
 
-const CAT_ICON: Record<string, JSX.Element> = {
+const CAT_ICON: Record<string, ReactNode> = {
   promoter:  <ThumbsUp  className="h-3.5 w-3.5" />,
   passive:   <Minus     className="h-3.5 w-3.5" />,
   detractor: <ThumbsDown className="h-3.5 w-3.5" />,

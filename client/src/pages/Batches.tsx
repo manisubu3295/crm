@@ -163,8 +163,10 @@ export function BatchesPage() {
 function BatchEnrollmentDialog({ batch, onClose }: { batch: any; onClose: () => void }) {
   const qc = useQueryClient();
   const [showEnroll, setShowEnroll] = useState(false);
+  const [activeTab, setActiveTab] = useState<"enrolled"|"waitlist">("enrolled");
   const [leadSearch, setLeadSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [transferId, setTransferId] = useState<string | null>(null);
 
   const { data } = useQuery({
     queryKey: ["batch-enrollments", batch.id],
@@ -191,6 +193,12 @@ function BatchEnrollmentDialog({ batch, onClose }: { batch: any; onClose: () => 
     onError: () => toast.error("Certificate issue failed"),
   });
 
+  const { data: waitlistData } = useQuery({
+    queryKey: ["batch-waitlist", batch.id],
+    queryFn: () => apiRequest<any>("GET", `/api/batches/${batch.id}/waitlist`),
+  });
+  const waitlist: any[] = waitlistData?.data ?? [];
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -198,7 +206,14 @@ function BatchEnrollmentDialog({ batch, onClose }: { batch: any; onClose: () => 
           <DialogTitle>{batch.name} — Students</DialogTitle>
         </DialogHeader>
         <div className="flex justify-between items-center mb-3">
-          <p className="text-sm text-gray-500">{enrollments.length} / {batch.capacity} enrolled</p>
+          <div className="flex gap-1">
+            <button onClick={() => setActiveTab("enrolled")} className={`px-3 py-1 text-xs rounded-lg font-medium ${activeTab==="enrolled"?"bg-indigo-600 text-white":"bg-gray-100 text-gray-600"}`}>
+              Enrolled ({enrollments.length}/{batch.capacity})
+            </button>
+            <button onClick={() => setActiveTab("waitlist")} className={`px-3 py-1 text-xs rounded-lg font-medium ${activeTab==="waitlist"?"bg-indigo-600 text-white":"bg-gray-100 text-gray-600"}`}>
+              Waitlist ({waitlist.length})
+            </button>
+          </div>
           <Button size="sm" onClick={() => setShowEnroll(true)}><Plus className="h-3.5 w-3.5" /> Enroll Student</Button>
         </div>
 
@@ -379,11 +394,12 @@ function TimetableDialog({ batch, onClose }: { batch: any; onClose: () => void }
           <div className="py-8 text-center text-gray-400">Loading…</div>
         ) : (
           <div className="space-y-3 mb-4">
-            {DAYS.map((day, i) => (
-              grouped[i].length > 0 && (
+            {DAYS.map((day, i) => {
+              const daySessions = grouped[i] ?? [];
+              return daySessions.length > 0 && (
                 <div key={i} className="rounded-lg border overflow-hidden">
                   <div className="bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">{day}</div>
-                  {grouped[i].map((s) => (
+                  {daySessions.map((s) => (
                     <div key={s.id} className="flex items-center gap-3 px-3 py-2 bg-white hover:bg-gray-50 border-t first:border-t-0">
                       <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                       <span className="text-sm font-mono">{s.start_time} – {s.end_time}</span>
@@ -396,8 +412,8 @@ function TimetableDialog({ batch, onClose }: { batch: any; onClose: () => void }
                     </div>
                   ))}
                 </div>
-              )
-            ))}
+              );
+            })}
             {sessions.length === 0 && (
               <div className="py-8 text-center text-gray-400">
                 <Calendar className="mx-auto h-8 w-8 text-gray-200 mb-2" />

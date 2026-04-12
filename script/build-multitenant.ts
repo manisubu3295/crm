@@ -10,8 +10,8 @@ await build({
   bundle: true,
   platform: "node",
   target: "node22",
-  format: "cjs",
-  outfile: path.join(root, "dist/server.cjs"),
+  format: "esm",
+  outfile: path.join(root, "dist/server.js"),
   external: [
     // Native modules
     "pg-native",
@@ -29,4 +29,4 @@ await build({
   minify: false,
 });
 
-console.log("Server build complete: dist/server.cjs");
+console.log("Server build complete: dist/server.js");

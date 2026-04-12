@@ -289,8 +289,8 @@ export function DevE2EPage() {
                 { key: "sendEmail",    label: "Email",     ch: "email",    fn: runSendEmail },
                 { key: "sendSMS",      label: "SMS",       ch: "sms",      fn: runSendSMS },
                 { key: "sendIVR",      label: "IVR Call",  ch: "ivr",      fn: runSendIVR },
-              ].map(({ key, label, ch, fn }) => {
-                const Icon = CHANNEL_ICONS[ch];
+              ].map(({ key, label, ch, fn }: { key: string; label: string; ch: keyof typeof CHANNEL_ICONS; fn: () => Promise<void> }) => {
+                const Icon = CHANNEL_ICONS[ch] ?? MessageSquare;
                 return (
                   <StepButton
                     key={key}

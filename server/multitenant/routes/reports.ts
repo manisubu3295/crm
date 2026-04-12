@@ -149,6 +149,178 @@ router.get("/response-time", ...guard, async (req: TenantRequest, res) => {
   res.json({ ok: true, data: result.rows });
 });
 
+// GET /api/reports/revenue  — monthly fee collection + course-wise breakdown
+router.get("/revenue", ...guard, async (req: TenantRequest, res) => {
+  const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+  const df = buildDateFilter(fromDate, toDate, "p.paid_at");
+
+  const [monthly, byCourse] = await Promise.all([
+    req.db.query(
+      `SELECT
+         DATE_TRUNC('month', p.paid_at)::date AS month,
+         SUM(p.amount) AS revenue,
+         COUNT(*) AS payments
+       FROM payments p
+       WHERE p.status = 'completed' ${df.sql}
+       GROUP BY 1 ORDER BY 1`,
+      df.params
+    ),
+    req.db.query(
+      `SELECT
+         c.name AS course_name,
+         SUM(p.amount) AS revenue,
+         COUNT(DISTINCT p.lead_id) AS students,
+         COUNT(*) AS payments
+       FROM payments p
+       JOIN leads l ON l.id = p.lead_id
+       LEFT JOIN courses c ON c.id = l.course_id
+       WHERE p.status = 'completed' ${df.sql}
+       GROUP BY c.name ORDER BY revenue DESC`,
+      df.params
+    ),
+  ]);
+
+  const total = monthly.rows.reduce((s: number, r: any) => s + parseFloat(r.revenue), 0);
+  res.json({ ok: true, data: { monthly: monthly.rows, byCourse: byCourse.rows, total } });
+});
+
+// GET /api/reports/source  — lead source attribution
+router.get("/source", ...guard, async (req: TenantRequest, res) => {
+  const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+  const df = buildDateFilter(fromDate, toDate);
+
+  const result = await req.db.query(
+    `SELECT
+       COALESCE(source, 'unknown') AS source,
+       COUNT(*) AS total_leads,
+       COUNT(*) FILTER (WHERE stage = 'admitted') AS admissions,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE stage = 'admitted') / NULLIF(COUNT(*), 0), 1) AS conversion_rate,
+       ROUND(AVG(lead_score), 1) AS avg_score
+     FROM leads
+     WHERE 1=1 ${df.sql}
+     GROUP BY source ORDER BY admissions DESC`,
+    df.params
+  );
+  res.json({ ok: true, data: result.rows });
+});
+
+// GET /api/reports/nps-trend  — NPS score trend month-by-month
+router.get("/nps-trend", ...guard, async (req: TenantRequest, res) => {
+  const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+  const df = buildDateFilter(fromDate, toDate, "n.responded_at");
+
+  const [trend, byCourse] = await Promise.all([
+    req.db.query(
+      `SELECT
+         DATE_TRUNC('month', n.responded_at)::date AS month,
+         ROUND(AVG(n.score), 2) AS avg_score,
+         COUNT(*) FILTER (WHERE n.category='promoter')  AS promoters,
+         COUNT(*) FILTER (WHERE n.category='passive')   AS passives,
+         COUNT(*) FILTER (WHERE n.category='detractor') AS detractors,
+         COUNT(*) AS responses,
+         ROUND(
+           (COUNT(*) FILTER (WHERE n.category='promoter') - COUNT(*) FILTER (WHERE n.category='detractor'))::numeric
+           / NULLIF(COUNT(*), 0) * 100, 1
+         ) AS nps_score
+       FROM nps_responses n
+       WHERE n.responded_at IS NOT NULL ${df.sql}
+       GROUP BY 1 ORDER BY 1`,
+      df.params
+    ),
+    req.db.query(
+      `SELECT
+         c.name AS course_name,
+         ROUND(AVG(n.score), 2) AS avg_score,
+         COUNT(*) AS responses,
+         ROUND(
+           (COUNT(*) FILTER (WHERE n.category='promoter') - COUNT(*) FILTER (WHERE n.category='detractor'))::numeric
+           / NULLIF(COUNT(*), 0) * 100, 1
+         ) AS nps_score
+       FROM nps_responses n
+       LEFT JOIN courses c ON c.id = n.course_id
+       WHERE n.responded_at IS NOT NULL ${df.sql}
+       GROUP BY c.name ORDER BY nps_score DESC NULLS LAST`,
+      df.params
+    ),
+  ]);
+
+  res.json({ ok: true, data: { trend: trend.rows, byCourse: byCourse.rows } });
+});
+
+// GET /api/reports/batch-fill  — batch fill rate
+router.get("/batch-fill", ...guard, async (req: TenantRequest, res) => {
+  const { courseId } = req.query as { courseId?: string };
+  const params: unknown[] = [];
+  const cond = courseId ? `AND b.course_id = $${params.push(courseId)}` : "";
+
+  const result = await req.db.query(
+    `SELECT
+       b.id, b.name AS batch_name, b.capacity, b.start_date, b.end_date,
+       b.is_active, b.mode, b.batch_type,
+       c.name AS course_name,
+       COUNT(e.id) AS enrolled,
+       ROUND(100.0 * COUNT(e.id) / NULLIF(b.capacity, 0), 1) AS fill_pct,
+       b.capacity - COUNT(e.id) AS seats_left
+     FROM batches b
+     LEFT JOIN courses c ON c.id = b.course_id
+     LEFT JOIN enrollments e ON e.batch_id = b.id
+     WHERE 1=1 ${cond}
+     GROUP BY b.id, b.name, b.capacity, b.start_date, b.end_date, b.is_active, b.mode, b.batch_type, c.name
+     ORDER BY b.start_date DESC NULLS LAST, fill_pct DESC`,
+    params
+  );
+
+  const summary = {
+    total: result.rows.length,
+    full: result.rows.filter((r: any) => parseFloat(r.fill_pct) >= 100).length,
+    healthy: result.rows.filter((r: any) => parseFloat(r.fill_pct) >= 70 && parseFloat(r.fill_pct) < 100).length,
+    low: result.rows.filter((r: any) => parseFloat(r.fill_pct) < 70).length,
+    avgFill: result.rows.length
+      ? Math.round(result.rows.reduce((s: number, r: any) => s + parseFloat(r.fill_pct ?? 0), 0) / result.rows.length)
+      : 0,
+  };
+
+  res.json({ ok: true, data: result.rows, meta: summary });
+});
+
+// GET /api/reports/placement  — placement rate per course
+router.get("/placement", ...guard, async (req: TenantRequest, res) => {
+  const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+  const df = buildDateFilter(fromDate, toDate, "p.placed_at");
+
+  const [byCourse, topCompanies, trend] = await Promise.all([
+    req.db.query(
+      `SELECT
+         c.name AS course_name, c.id AS course_id,
+         COUNT(DISTINCT e.lead_id) AS total_students,
+         COUNT(DISTINCT p.lead_id) AS placed,
+         ROUND(100.0 * COUNT(DISTINCT p.lead_id) / NULLIF(COUNT(DISTINCT e.lead_id), 0), 1) AS placement_rate,
+         ROUND(AVG(p.package_lpa) FILTER (WHERE p.package_lpa IS NOT NULL), 2) AS avg_package_lpa
+       FROM courses c
+       LEFT JOIN leads l ON l.course_id = c.id
+       LEFT JOIN enrollments e ON e.lead_id = l.id
+       LEFT JOIN placements p ON p.lead_id = l.id AND p.verified = TRUE ${df.sql.replace("AND", "AND p.")}
+       GROUP BY c.id, c.name ORDER BY placed DESC`,
+      df.params
+    ),
+    req.db.query(
+      `SELECT company, COUNT(*) AS placements, ROUND(AVG(package_lpa), 2) AS avg_package_lpa
+       FROM placements WHERE verified = TRUE ${df.sql}
+       GROUP BY company ORDER BY placements DESC LIMIT 10`,
+      df.params
+    ),
+    req.db.query(
+      `SELECT DATE_TRUNC('month', placed_at)::date AS month, COUNT(*) AS placements,
+              ROUND(AVG(package_lpa), 2) AS avg_lpa
+       FROM placements WHERE verified = TRUE ${df.sql}
+       GROUP BY 1 ORDER BY 1`,
+      df.params
+    ),
+  ]);
+
+  res.json({ ok: true, data: { byCourse: byCourse.rows, topCompanies: topCompanies.rows, trend: trend.rows } });
+});
+
 // POST /api/reports/export  — PDF or Excel download
 router.post("/export", ...guard, async (req: TenantRequest, res) => {
   const parsed = reportExportSchema.safeParse(req.body);

@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { getRedisConnection } from "../queues/redisClient.js";
-import { getTenantDb } from "../db/tenantDb.js";
+import { getPool } from "../tenant/dbPool.js";
 import { whatsappService } from "../services/whatsappService.js";
 import logger from "../logger.js";
 
@@ -19,7 +19,7 @@ export function startDigestWorker() {
     async (job) => {
       if (job.name !== "daily-digest") return;
       const { tenantId } = job.data as { tenantId: string };
-      const db = getTenantDb(tenantId);
+      const db = await getPool(tenantId);
 
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);

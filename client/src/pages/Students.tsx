@@ -88,7 +88,7 @@ export function StudentsPage() {
               {(stats?.data?.byCourse ?? []).slice(0, 3).map((r: any) => (
                 <div key={r.course} className="flex items-center justify-between">
                   <span className="truncate text-xs text-foreground">{r.course}</span>
-                  <Badge variant="secondary" className="text-[10px]">{r.count}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{r.count}</Badge>
                 </div>
               ))}
               {!stats?.data?.byCourse?.length && <p className="text-xs text-muted-foreground">No data</p>}
@@ -102,7 +102,7 @@ export function StudentsPage() {
               {(stats?.data?.byCounsellor ?? []).slice(0, 3).map((r: any) => (
                 <div key={r.counsellor} className="flex items-center justify-between">
                   <span className="truncate text-xs text-foreground">{r.counsellor}</span>
-                  <Badge variant="secondary" className="text-[10px]">{r.count}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{r.count}</Badge>
                 </div>
               ))}
               {!stats?.data?.byCounsellor?.length && <p className="text-xs text-muted-foreground">No data</p>}

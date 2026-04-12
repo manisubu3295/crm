@@ -27,7 +27,14 @@ export const reportService = {
   async exportExcel(
     db: Pool,
     type: string,
-    opts: { fromDate?: string; toDate?: string; counsellorId?: string; campaignId?: string }
+    opts: {
+      fromDate?: string;
+      toDate?: string;
+      counsellorId?: string;
+      campaignId?: string;
+      stage?: string;
+      assignedTo?: string;
+    }
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Aadhirai CRM";
@@ -53,6 +60,8 @@ export const reportService = {
       const clauses: string[] = [];
       if (opts.fromDate) { params.push(opts.fromDate); clauses.push(`l.created_at >= $${params.length}`); }
       if (opts.toDate)   { params.push(opts.toDate);   clauses.push(`l.created_at <= $${params.length}`); }
+      if (opts.stage)    { params.push(opts.stage);    clauses.push(`l.stage = $${params.length}`); }
+      if (opts.assignedTo) { params.push(opts.assignedTo); clauses.push(`l.assigned_to = $${params.length}`); }
 
       const rows = await db.query(
         `SELECT l.lead_no, l.full_name, l.phone, l.email, l.city, c.name AS course_name,

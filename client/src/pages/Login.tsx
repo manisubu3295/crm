@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { toast } from "sonner";import { useLocation } from "wouter";import { Loader2, MessageSquare, Users, BarChart2, Zap } from "lucide-react";
+import { toast } from "sonner";import { useLocation } from "wouter";import { Loader2, MessageSquare, Users, BarChart2, Zap, BookOpen } from "lucide-react";
 import { useAuth } from "../lib/auth.js";
 import { Button } from "../components/ui/button.js";
 import { Input } from "../components/ui/input.js";
+import { LoginGuide, UserGuide } from "../components/guide/UserGuide.js";
 
 const schema = z.object({
   tenantId: z.string().min(1, "Institution ID required"),
@@ -24,6 +25,8 @@ export function LoginPage() {
   const { login } = useAuth();
   const [, navigate] = useLocation();
   const [loading, setLoading] = useState(false);
+  const [showLoginGuide, setShowLoginGuide] = useState(false);
+  const [showFullGuide, setShowFullGuide] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -44,6 +47,15 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen">
+      {showLoginGuide && (
+        <LoginGuide
+          onClose={() => setShowLoginGuide(false)}
+          onOpenFull={() => { setShowLoginGuide(false); setShowFullGuide(true); }}
+        />
+      )}
+      {showFullGuide && (
+        <UserGuide onClose={() => setShowFullGuide(false)} />
+      )}
       {/* Left panel — dark brand */}
       <div className="hidden lg:flex lg:w-[420px] flex-col justify-between bg-slate-900 p-10 shrink-0">
         {/* Logo */}
@@ -79,8 +91,18 @@ export function LoginPage() {
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-[11px] text-slate-600">© 2026 Aadhirai Technologies</p>
+        {/* Guide link */}
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => setShowLoginGuide(true)}
+            className="flex items-center gap-2 text-[12px] text-slate-400 hover:text-indigo-400 transition-colors group w-fit"
+          >
+            <BookOpen className="h-3.5 w-3.5 group-hover:text-indigo-400" />
+            What is Aadhirai CRM? · View Guide
+          </button>
+          <p className="text-[11px] text-slate-600">© 2026 Aadhirai Technologies</p>
+        </div>
       </div>
 
       {/* Right panel — form */}

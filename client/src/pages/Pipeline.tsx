@@ -23,7 +23,7 @@ function hrs(n: number | string) {
 function UrgencyBadge({ hours }: { hours: number }) {
   if (hours > 72) return <Badge variant="destructive" className="text-[10px]">{hrs(hours)} overdue</Badge>;
   if (hours > 24) return <Badge variant="warning" className="text-[10px]">{hrs(hours)}</Badge>;
-  return <Badge variant="secondary" className="text-[10px]">{hrs(hours)}</Badge>;
+  return <Badge variant="outline" className="text-[10px]">{hrs(hours)}</Badge>;
 }
 
 function LeadRow({ lead, extra, href }: { lead: any; extra?: React.ReactNode; href: string }) {
@@ -289,7 +289,7 @@ export function PipelinePage() {
               href={`/leads/${lead.id}`}
               extra={
                 <div className="flex flex-wrap items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="text-[10px] capitalize">{lead.stage}</Badge>
+                  <Badge variant="outline" className="text-[10px] capitalize">{lead.stage}</Badge>
                   <span className="text-[10px] text-muted-foreground">
                     Idle {Math.round(Number(lead.days_stale))}d
                   </span>
@@ -313,9 +313,9 @@ export function PipelinePage() {
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
                   <p className="font-semibold text-[13px] text-foreground">{task.title}</p>
                   <UrgencyBadge hours={Number(task.hours_overdue)} />
-                  <Badge variant="secondary" className="text-[10px] capitalize">{task.task_type}</Badge>
+                  <Badge variant="outline" className="text-[10px] capitalize">{task.task_type}</Badge>
                   <Badge
-                    variant={task.priority === "urgent" ? "destructive" : task.priority === "high" ? "warning" : "secondary"}
+                    variant={task.priority === "urgent" ? "destructive" : task.priority === "high" ? "warning" : "outline"}
                     className="text-[10px] capitalize"
                   >{task.priority}</Badge>
                 </div>

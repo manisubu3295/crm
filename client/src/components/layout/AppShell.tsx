@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { Sidebar, MobileMenuButton } from "./Sidebar.js";
 import { useSocket } from "../../hooks/useSocket.js";
 import { cn } from "../../lib/utils.js";
+import { HelpCircle } from "lucide-react";
+import { UserGuide } from "../guide/UserGuide.js";
 
 interface AppShellProps {
   children: ReactNode;
@@ -19,6 +21,7 @@ export function AppShell({ children, title }: AppShellProps) {
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024);
@@ -68,12 +71,20 @@ export function AppShell({ children, title }: AppShellProps) {
       >
         {/* Top header */}
         <header className="sticky top-0 z-20 flex h-[60px] shrink-0 items-center border-b border-border/60 bg-background/80 backdrop-blur-sm px-6">
-          <div className={cn("flex items-center gap-3", isMobile && "pl-10")}>
+          <div className={cn("flex items-center gap-3 flex-1", isMobile && "pl-10")}>
             {title && (
               <h1 className="text-[15px] font-semibold text-foreground tracking-tight">{title}</h1>
             )}
           </div>
+          <button
+            onClick={() => setShowGuide(true)}
+            title="Open User Guide"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <HelpCircle className="h-4.5 w-4.5" />
+          </button>
         </header>
+        {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
 
         {/* Page content */}
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto">

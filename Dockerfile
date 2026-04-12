@@ -28,4 +28,4 @@ COPY server/multitenant/migrations ./dist/multitenant/migrations
 RUN mkdir -p /var/tmp/crm-reports
 
 EXPOSE 3000
-CMD ["node", "dist/server.cjs"]
+CMD ["node", "dist/server.js"]

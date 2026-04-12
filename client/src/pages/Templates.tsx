@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageSquare, Plus, CheckCircle2, Clock, XCircle, PauseCircle,
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { apiRequest } from "../lib/queryClient.js";
 import { formatDate } from "../lib/utils.js";
 
-const APPROVAL_META: Record<string, { label: string; color: string; icon: JSX.Element }> = {
+const APPROVAL_META: Record<string, { label: string; color: string; icon: ReactNode }> = {
   draft:    { label: "Draft",    color: "bg-gray-100 text-gray-600",    icon: <FileEdit  className="h-3 w-3" /> },
   pending:  { label: "Pending",  color: "bg-amber-100 text-amber-700",  icon: <Clock     className="h-3 w-3" /> },
   approved: { label: "Approved", color: "bg-emerald-100 text-emerald-700", icon: <CheckCircle2 className="h-3 w-3" /> },
@@ -104,7 +105,7 @@ export function TemplatesPage() {
       ) : (
         <div className="space-y-3">
           {templates.map((t) => {
-            const meta = APPROVAL_META[t.approval_status] ?? APPROVAL_META.draft;
+            const meta = APPROVAL_META[t.approval_status] ?? APPROVAL_META["draft"]!;
             const isWA = t.channel === "whatsapp";
             const canSubmit = isWA && ["draft", "rejected"].includes(t.approval_status);
             const isOpen = expanded === t.id;
@@ -244,8 +245,8 @@ function TemplateFormDialog({ template, onClose }: { template?: any; onClose: ()
               <Select value={f.approvalStatus} onValueChange={(v) => set("approvalStatus", v)}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.keys(APPROVAL_META).map((s) => (
-                    <SelectItem key={s} value={s}>{APPROVAL_META[s].label}</SelectItem>
+                  {Object.entries(APPROVAL_META).map(([s, meta]) => (
+                    <SelectItem key={s} value={s}>{meta.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

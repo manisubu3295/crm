@@ -3,7 +3,11 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
 } from "recharts";
-import { Users, CheckSquare, TrendingUp, AlertTriangle, ArrowUpRight, ArrowDownRight, CreditCard, IndianRupee } from "lucide-react";
+import {
+  Users, CheckSquare, TrendingUp, AlertTriangle, ArrowUpRight,
+  ArrowDownRight, CreditCard, IndianRupee, Video, Star,
+  Radio, Clock,
+} from "lucide-react";
 import { AppShell } from "../components/layout/AppShell.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.js";
 import { Badge } from "../components/ui/badge.js";
@@ -17,7 +21,11 @@ export function DashboardPage() {
   const { data: funnel }      = useQuery({ queryKey: ["report", "funnel"],  queryFn: () => apiRequest<any>("GET", "/api/reports/funnel") });
   const { data: trend }       = useQuery({ queryKey: ["report", "trend"],   queryFn: () => apiRequest<any>("GET", "/api/reports/conversion?period=7d") });
   const { data: taskSum }     = useTaskSummary();
-  const { data: payStats }    = useQuery({ queryKey: ["payment-stats"], queryFn: () => apiRequest<any>("GET", "/api/payments/stats"), staleTime: 60_000 });
+  const { data: payStats }    = useQuery({ queryKey: ["payment-stats"],    queryFn: () => apiRequest<any>("GET", "/api/payments/stats"),           staleTime: 60_000 });
+  const { data: demosToday }  = useQuery({ queryKey: ["demos-today"],      queryFn: () => apiRequest<any>("GET", "/api/demos?status=scheduled&limit=10"), staleTime: 60_000 });
+  const { data: duesData }    = useQuery({ queryKey: ["dues-summary"],     queryFn: () => apiRequest<any>("GET", "/api/payments/dues?days=7"),     staleTime: 60_000 });
+  const { data: npsStats }    = useQuery({ queryKey: ["nps-dash"],         queryFn: () => apiRequest<any>("GET", "/api/nps/stats"),                staleTime: 300_000 });
+  const { data: broadcasts }  = useQuery({ queryKey: ["broadcasts-dash"],  queryFn: () => apiRequest<any>("GET", "/api/broadcasts"),               staleTime: 60_000 });
   const { data: recentLeads } = useQuery({
     queryKey: ["leads", { limit: 5 }],
     queryFn: () => apiRequest<any>("GET", "/api/leads?limit=5&page=1"),
@@ -68,7 +76,7 @@ export function DashboardPage() {
       value: summary?.["overdue"] ?? "—",
       sub: "need attention",
       icon: AlertTriangle,
-      trend: (summary?.["overdue"] ?? 0) > 0 ? "down" : "up",
+      trend: Number(summary?.["overdue"] ?? 0) > 0 ? "down" : "up",
       bgColor: "bg-rose-50",
       textColor: "text-rose-600",
       iconGrad: "from-rose-500 to-pink-600",
@@ -104,14 +112,15 @@ export function DashboardPage() {
         })}
       </div>
 
-      {/* Revenue KPI Row */}
+      {/* Revenue + Operations KPI Row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "Collected Today",   value: `₹${parseFloat(payStats?.data?.today ?? "0").toLocaleString("en-IN")}`,       icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-50" },
-          { label: "This Month",         value: `₹${parseFloat(payStats?.data?.this_month ?? "0").toLocaleString("en-IN")}`, icon: CreditCard,  color: "text-indigo-600", bg: "bg-indigo-50" },
-          { label: "All Time Revenue",   value: `₹${parseFloat(payStats?.data?.all_time ?? "0").toLocaleString("en-IN")}`,   icon: TrendingUp,  color: "text-blue-600",  bg: "bg-blue-50" },
-          { label: "Pending Payments",   value: `₹${parseFloat(payStats?.data?.pending ?? "0").toLocaleString("en-IN")}`,    icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50" },
-        ].map((k) => {
+          { label: "Collected Today",    value: `₹${parseFloat(payStats?.data?.today ?? "0").toLocaleString("en-IN")}`,       icon: IndianRupee, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "This Month",          value: `₹${parseFloat(payStats?.data?.this_month ?? "0").toLocaleString("en-IN")}`, icon: CreditCard,  color: "text-indigo-600", bg: "bg-indigo-50" },
+          { label: "Overdue Dues",        value: duesData?.meta?.overdueCount ?? "—",                                          icon: AlertTriangle, color: "text-red-600",  bg: "bg-red-50",
+            sub: duesData?.meta?.overdueAmt ? `₹${parseFloat(duesData.meta.overdueAmt).toLocaleString("en-IN")}` : "" },
+          { label: "Demos Today",         value: (demosToday?.data ?? []).filter((d: any) => new Date(d.scheduled_at).toDateString() === new Date().toDateString()).length, icon: Video, color: "text-violet-600", bg: "bg-violet-50" },
+        ].map((k: any) => {
           const Icon = k.icon;
           return (
             <Card key={k.label} className="border-0 shadow-sm">
@@ -120,6 +129,38 @@ export function DashboardPage() {
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-muted-foreground">{k.label}</p>
                     <p className="text-2xl font-bold text-foreground">{k.value}</p>
+                    {k.sub && <p className="text-xs text-muted-foreground">{k.sub}</p>}
+                  </div>
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${k.bg}`}>
+                    <Icon className={`h-5 w-5 ${k.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Engagement KPIs */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: "NPS Score",          value: npsStats?.data?.overall?.nps_score ?? "—",   icon: Star,  color: "text-amber-600", bg: "bg-amber-50",
+            sub: `${npsStats?.data?.overall?.responses ?? 0} responses` },
+          { label: "Active Broadcasts",  value: (broadcasts?.data ?? []).filter((b: any) => b.status === "running").length, icon: Radio, color: "text-blue-600", bg: "bg-blue-50",
+            sub: `${(broadcasts?.data ?? []).filter((b: any) => b.status === "completed").length} completed` },
+          { label: "Upcoming Dues",      value: duesData?.meta?.upcomingCount ?? "—",         icon: Clock, color: "text-orange-600", bg: "bg-orange-50",
+            sub: duesData?.meta?.upcomingAmt ? `₹${parseFloat(duesData.meta.upcomingAmt).toLocaleString("en-IN")} this week` : "" },
+          { label: "All Time Revenue",   value: `₹${parseFloat(payStats?.data?.all_time ?? "0").toLocaleString("en-IN")}`, icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50" },
+        ].map((k: any) => {
+          const Icon = k.icon;
+          return (
+            <Card key={k.label} className="border-0 shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">{k.label}</p>
+                    <p className="text-2xl font-bold text-foreground">{k.value}</p>
+                    {k.sub && <p className="text-xs text-muted-foreground">{k.sub}</p>}
                   </div>
                   <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${k.bg}`}>
                     <Icon className={`h-5 w-5 ${k.color}`} />

@@ -86,7 +86,7 @@ router.get("/:id/enrollments", ...guard, async (req: TenantRequest, res) => {
 
 // ─── POST /api/batches/:id/enroll ────────────────────────────
 router.post("/:id/enroll", ...guard, async (req: TenantRequest, res) => {
-  const { lead_id, fee_amount = 0, notes } = req.body as Record<string, unknown>;
+  const { lead_id, fee_amount = 0, notes, waitlist = false } = req.body as Record<string, unknown>;
   if (!lead_id) { res.status(400).json({ ok: false, message: "lead_id required" }); return; }
 
   // Check capacity
@@ -97,8 +97,24 @@ router.post("/:id/enroll", ...guard, async (req: TenantRequest, res) => {
   );
   const batch = capacityCheck.rows[0];
   if (!batch) { res.status(404).json({ ok: false, message: "Batch not found" }); return; }
+
   if (parseInt(batch.enrolled) >= parseInt(batch.capacity)) {
-    res.status(400).json({ ok: false, message: "Batch is full" }); return;
+    // Batch full — add to waitlist if requested
+    if (waitlist) {
+      const posRow = await req.db.query(
+        "SELECT COALESCE(MAX(position),0)+1 AS next_pos FROM batch_waitlist WHERE batch_id=$1",
+        [req.params.id]
+      );
+      const row = await req.db.query(
+        `INSERT INTO batch_waitlist (batch_id, lead_id, position, notes)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (batch_id, lead_id) DO UPDATE SET notes=EXCLUDED.notes RETURNING *`,
+        [req.params.id, lead_id, posRow.rows[0].next_pos, notes ?? null]
+      );
+      res.status(201).json({ ok: true, waitlisted: true, data: row.rows[0] });
+      return;
+    }
+    res.status(400).json({ ok: false, message: "Batch is full", canWaitlist: true }); return;
   }
 
   const row = await req.db.query(
@@ -107,7 +123,80 @@ router.post("/:id/enroll", ...guard, async (req: TenantRequest, res) => {
      ON CONFLICT (lead_id, batch_id) DO UPDATE SET notes=EXCLUDED.notes RETURNING *`,
     [lead_id, req.params.id, fee_amount, notes??null]
   );
+
+  // Remove from waitlist if they were on it
+  await req.db.query("DELETE FROM batch_waitlist WHERE batch_id=$1 AND lead_id=$2", [req.params.id, lead_id]);
+
   res.status(201).json({ ok: true, data: row.rows[0] });
+});
+
+// ─── GET /api/batches/:id/waitlist ───────────────────────────
+router.get("/:id/waitlist", ...guard, async (req: TenantRequest, res) => {
+  const rows = await req.db.query(
+    `SELECT w.*, l.full_name AS lead_name, l.phone AS lead_phone, l.stage
+     FROM batch_waitlist w
+     JOIN leads l ON l.id = w.lead_id
+     WHERE w.batch_id = $1
+     ORDER BY w.position ASC`,
+    [req.params.id]
+  );
+  res.json({ ok: true, data: rows.rows });
+});
+
+// ─── POST /api/batches/enrollments/:id/transfer ──────────────
+router.post("/enrollments/:id/transfer", ...guard, async (req: TenantRequest, res) => {
+  const { new_batch_id } = req.body as { new_batch_id?: string };
+  if (!new_batch_id) { res.status(400).json({ ok: false, message: "new_batch_id required" }); return; }
+
+  // Check enrollment exists
+  const enrRow = await req.db.query("SELECT * FROM enrollments WHERE id=$1", [req.params.id]);
+  if (!enrRow.rows[0]) { res.status(404).json({ ok: false, message: "Enrollment not found" }); return; }
+  const enr = enrRow.rows[0];
+
+  // Check new batch capacity
+  const capRow = await req.db.query(
+    `SELECT b.capacity, (SELECT COUNT(*) FROM enrollments e WHERE e.batch_id=b.id AND e.id != $2) AS enrolled
+     FROM batches b WHERE b.id=$1`,
+    [new_batch_id, req.params.id]
+  );
+  if (!capRow.rows[0]) { res.status(404).json({ ok: false, message: "Target batch not found" }); return; }
+  if (parseInt(capRow.rows[0].enrolled) >= parseInt(capRow.rows[0].capacity)) {
+    res.status(400).json({ ok: false, message: "Target batch is full" }); return;
+  }
+
+  // Check no existing enrollment in target batch
+  const exists = await req.db.query(
+    "SELECT id FROM enrollments WHERE lead_id=$1 AND batch_id=$2",
+    [enr.lead_id, new_batch_id]
+  );
+  if (exists.rows.length) { res.status(400).json({ ok: false, message: "Student already enrolled in target batch" }); return; }
+
+  const row = await req.db.query(
+    "UPDATE enrollments SET batch_id=$2, updated_at=now() WHERE id=$1 RETURNING *",
+    [req.params.id, new_batch_id]
+  );
+
+  // Notify next waitlist person in old batch
+  try {
+    const nextWaiting = await req.db.query(
+      `SELECT w.*, l.full_name, l.phone FROM batch_waitlist w
+       JOIN leads l ON l.id = w.lead_id
+       WHERE w.batch_id = $1 ORDER BY w.position ASC LIMIT 1`,
+      [enr.batch_id]
+    );
+    if (nextWaiting.rows[0]) {
+      const { full_name, phone } = nextWaiting.rows[0];
+      await whatsappService.sendText(phone,
+        `Good news, ${full_name}! A seat has opened up in your waitlisted batch. Please contact us to confirm your enrollment.`
+      );
+      await req.db.query(
+        "UPDATE batch_waitlist SET notified=TRUE WHERE id=$1",
+        [nextWaiting.rows[0].id]
+      );
+    }
+  } catch (_) { /* Non-fatal */ }
+
+  res.json({ ok: true, data: row.rows[0] });
 });
 
 // ─── PATCH /api/batches/enrollments/:enrollmentId ────────────
