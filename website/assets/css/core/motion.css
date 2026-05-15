@@ -1,0 +1,50 @@
+:root {
+  --motion-fast: 180ms;
+  --motion-base: 420ms;
+  --motion-slow: 680ms;
+  --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-emphasis: cubic-bezier(0.2, 0.65, 0.2, 1);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-standard);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-stagger] > .reveal:nth-child(1) { --reveal-delay: 0ms; }
+[data-stagger] > .reveal:nth-child(2) { --reveal-delay: 70ms; }
+[data-stagger] > .reveal:nth-child(3) { --reveal-delay: 140ms; }
+[data-stagger] > .reveal:nth-child(4) { --reveal-delay: 210ms; }
+[data-stagger] > .reveal:nth-child(5) { --reveal-delay: 280ms; }
+[data-stagger] > .reveal:nth-child(6) { --reveal-delay: 350ms; }
+
+.btn {
+  will-change: transform;
+  transition:
+    transform var(--motion-fast) var(--ease-emphasis),
+    filter var(--motion-fast) var(--ease-emphasis),
+    background-color var(--motion-fast) var(--ease-emphasis),
+    border-color var(--motion-fast) var(--ease-emphasis);
+}
+
+.btn.is-magnetic {
+  transition-duration: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .btn {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    transform: none !important;
+  }
+}

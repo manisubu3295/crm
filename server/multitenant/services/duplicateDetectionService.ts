@@ -37,21 +37,26 @@ export const duplicateDetectionService = {
     }
 
     // 3. Fuzzy name match using pg_trgm (similarity > 0.8)
-    const byName = await db.query(
-      `SELECT id, lead_no FROM leads
-       WHERE similarity(full_name, $1) > 0.8
-         AND is_duplicate = FALSE
-       ORDER BY similarity(full_name, $1) DESC
-       LIMIT 1`,
-      [data.fullName]
-    );
-    if (byName.rows[0]) {
-      return {
-        isDuplicate: true,
-        matchedLeadId: byName.rows[0].id,
-        matchedLeadNo: byName.rows[0].lead_no,
-        confidence: "fuzzy_name",
-      };
+    // If pg_trgm is unavailable in a tenant DB, skip fuzzy detection but allow lead creation.
+    try {
+      const byName = await db.query(
+        `SELECT id, lead_no FROM leads
+         WHERE similarity(full_name, $1) > 0.8
+           AND is_duplicate = FALSE
+         ORDER BY similarity(full_name, $1) DESC
+         LIMIT 1`,
+        [data.fullName]
+      );
+      if (byName.rows[0]) {
+        return {
+          isDuplicate: true,
+          matchedLeadId: byName.rows[0].id,
+          matchedLeadNo: byName.rows[0].lead_no,
+          confidence: "fuzzy_name",
+        };
+      }
+    } catch {
+      // Do not fail lead creation if similarity() is unavailable.
     }
 
     return { isDuplicate: false, confidence: "none" };

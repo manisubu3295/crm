@@ -32,9 +32,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ username, password }),
     });
 
-    const data: AuthResponse = await res.json();
+    const text = await res.text();
+    let data: Partial<AuthResponse> & { ok?: boolean; message?: string } = {};
+    try {
+      data = text ? (JSON.parse(text) as Partial<AuthResponse> & { ok?: boolean; message?: string }) : {};
+    } catch {
+      throw new Error(`Login failed (${res.status}). Server returned an invalid response.`);
+    }
+
     if (!res.ok || !data.ok) {
-      throw new Error((data as { message?: string }).message ?? "Login failed");
+      throw new Error(data.message ?? `Login failed (${res.status})`);
+    }
+
+    if (!data.token || !data.tenantId || !data.user) {
+      throw new Error("Login failed. Missing auth data in server response.");
     }
 
     localStorage.setItem("crm_token", data.token);

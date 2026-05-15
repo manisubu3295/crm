@@ -32,11 +32,32 @@ import { TemplatesPage }     from "./pages/Templates.js";
 import { BroadcastsPage }   from "./pages/Broadcasts.js";
 
 const IS_DEV = import.meta.env.DEV;
+const ENABLE_DEV_TOOLS = import.meta.env.VITE_ENABLE_DEV_TOOLS === "true";
+
+/* Marketing website URL — in dev it's the standalone static server;
+   in production it's the same domain root ("/"). */
+const MARKETING_URL = IS_DEV ? "http://localhost:8080" : "/";
 
 function AppRoutes() {
   const { user } = useAuth();
 
-  if (!user) return <LoginPage />;
+  /* ── Unauthenticated: only /login is the CRM; everything else
+        goes back to the marketing website. ─────────────────────── */
+  if (!user) {
+    return (
+      <Switch>
+        <Route path="/login" component={LoginPage} />
+        <Route>{() => {
+          window.location.replace(MARKETING_URL);
+          return (
+            <div className="flex min-h-screen items-center justify-center bg-[#05091A]">
+              <div className="text-white/40 text-sm">Redirecting…</div>
+            </div>
+          );
+        }}</Route>
+      </Switch>
+    );
+  }
 
   return (
     <Switch>
@@ -62,15 +83,16 @@ function AppRoutes() {
       <Route path="/nps"          component={NPSPage} />
       <Route path="/templates"    component={TemplatesPage} />
       <Route path="/broadcasts"   component={BroadcastsPage} />
-      {IS_DEV && (
+      {IS_DEV && ENABLE_DEV_TOOLS && (
         <Route path="/dev/whatsapp"     component={DevWhatsAppPage} />
       )}
-      {IS_DEV && (
+      {IS_DEV && ENABLE_DEV_TOOLS && (
         <Route path="/dev/meta-console" component={DevMetaConsolePage} />
       )}
-      {IS_DEV && (
+      {IS_DEV && ENABLE_DEV_TOOLS && (
         <Route path="/dev/e2e" component={DevE2EPage} />
       )}
+      {/* /login when already authenticated → dashboard */}
       <Route path="/login">{() => { window.location.replace("/"); return null; }}</Route>
       <Route>
         <div className="flex min-h-screen items-center justify-center text-gray-500">

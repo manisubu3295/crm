@@ -109,7 +109,12 @@ router.get("/:id", ...guard, async (req: TenantRequest, res) => {
 router.post("/", ...guard, async (req: TenantRequest, res) => {
   const parsed = insertLeadSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ ok: false, code: "VALIDATION_ERROR", message: parsed.error.message });
+    res.status(400).json({
+      ok: false,
+      code: "VALIDATION_ERROR",
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+      issues: parsed.error.issues,
+    });
     return;
   }
   const result = await leadService.create(req.db, req.tenantId, parsed.data, req.user!.sub);

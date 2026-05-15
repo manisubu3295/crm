@@ -105,14 +105,32 @@ export function createApp(): {
     res.json({ ok: true, service: "aadhirai-crm", ts: new Date().toISOString() });
   });
 
-  // Serve Vite build in production
+  // Serve marketing website at "/" and CRM app for all other routes in production
   if (env.NODE_ENV === "production") {
     import("path").then(({ default: path }) => {
       import("url").then(({ fileURLToPath }) => {
         const __dirname = path.dirname(fileURLToPath(import.meta.url));
-        app.use(express.static(path.join(__dirname, "../public")));
+        // dist/multitenant/ → ../../website/ (two levels up from compiled server)
+        const websiteDir = path.join(__dirname, "../../website");
+        const crmPublic  = path.join(__dirname, "../public");
+
+        // Marketing website static assets (CSS, JS, images)
+        // Served before CRM assets to take priority for these specific paths
+        app.use("/assets/css",    express.static(path.join(websiteDir, "assets/css")));
+        app.use("/assets/js",     express.static(path.join(websiteDir, "assets/js")));
+        app.use("/assets/images", express.static(path.join(websiteDir, "assets/images")));
+
+        // CRM React build (hashed filenames — no collision with above)
+        app.use(express.static(crmPublic));
+
+        // Marketing website — root only
+        app.get("/", (_req, res) => {
+          res.sendFile(path.join(websiteDir, "index.html"));
+        });
+
+        // CRM SPA — all other non-API routes (login, dashboard, etc.)
         app.get("*", (_req, res) => {
-          res.sendFile(path.join(__dirname, "../public/index.html"));
+          res.sendFile(path.join(crmPublic, "index.html"));
         });
       });
     });

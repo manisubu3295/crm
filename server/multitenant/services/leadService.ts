@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { InsertLead } from "../../../shared/schema.js";
-import type { LeadQuery } from "../../../shared/types.js";
+import type { DuplicateCheckResult, LeadQuery } from "../../../shared/types.js";
 import { duplicateDetectionService } from "./duplicateDetectionService.js";
 import { leadScoringService } from "./leadScoringService.js";
 import { automationService } from "./automationService.js";
@@ -120,49 +120,75 @@ export const leadService = {
   },
 
   async create(db: Pool, tenantId: string, data: InsertLead, createdBy?: string) {
-    // Duplicate check
-    const dupResult = await duplicateDetectionService.check(db, {
-      phone: data.phone,
-      email: data.email ?? undefined,
-      fullName: data.fullName,
-    });
+    // Duplicate checks should not block lead creation.
+    let dupResult: DuplicateCheckResult = { isDuplicate: false, confidence: "none" };
+    try {
+      dupResult = await duplicateDetectionService.check(db, {
+        phone: data.phone,
+        email: data.email ?? undefined,
+        fullName: data.fullName,
+      });
+    } catch (err) {
+      logger.warn({ err, tenantId }, "Duplicate detection failed; proceeding without duplicate flag");
+    }
 
-    // Initial lead score
     const score = leadScoringService.calculateInitial(data);
 
-    const result = await db.query(
-      `INSERT INTO leads
-         (full_name, email, phone, alternate_phone, city, qualification,
-          course_id, source, campaign_id, ad_id, form_id, stage,
-          lead_score, assigned_to, is_duplicate, duplicate_of, referred_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',$12,$13,$14,$15,$16)
-       RETURNING *`,
-      [
-        data.fullName, data.email, data.phone, data.alternatePhone,
-        data.city, data.qualification, data.courseId, data.source,
-        data.campaignId, data.adId, data.formId, score,
-        data.assignedTo,
-        dupResult.isDuplicate,
-        dupResult.matchedLeadId ?? null,
-        (data as any).referredBy ?? null,
-      ]
-    );
+    const insertValues = [
+      data.fullName, data.email, data.phone, data.alternatePhone,
+      data.city, data.qualification, data.courseId, data.source,
+      data.campaignId, data.adId, data.formId, score,
+      data.assignedTo,
+      dupResult.isDuplicate,
+      dupResult.matchedLeadId ?? null,
+      (data as any).referredBy ?? null,
+    ];
+
+    let result;
+    try {
+      result = await db.query(
+        `INSERT INTO leads
+           (full_name, email, phone, alternate_phone, city, qualification,
+            course_id, source, campaign_id, ad_id, form_id, stage,
+            lead_score, assigned_to, is_duplicate, duplicate_of, referred_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',$12,$13,$14,$15,$16)
+         RETURNING *`,
+        insertValues
+      );
+    } catch (err: any) {
+      // Backward-compat for tenant DBs that have not applied referral migration yet.
+      if (err?.code === "42703" && String(err?.message ?? "").includes("referred_by")) {
+        result = await db.query(
+          `INSERT INTO leads
+             (full_name, email, phone, alternate_phone, city, qualification,
+              course_id, source, campaign_id, ad_id, form_id, stage,
+              lead_score, assigned_to, is_duplicate, duplicate_of)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'new',$12,$13,$14,$15)
+           RETURNING *`,
+          insertValues.slice(0, 15)
+        );
+      } else {
+        throw err;
+      }
+    }
 
     const lead = result.rows[0];
 
-    // Record initial stage history
     await db.query(
       "INSERT INTO lead_stage_history (lead_id, to_stage, changed_by) VALUES ($1, 'new', $2)",
       [lead.id, createdBy ?? null]
     );
 
-    // Fire automation trigger
-    await automationService.processEvent(db, tenantId, "lead_created", lead.id, {
-      stage: "new",
-      source: data.source,
-    });
+    // Side effects should not fail core lead creation.
+    try {
+      await automationService.processEvent(db, tenantId, "lead_created", lead.id, {
+        stage: "new",
+        source: data.source,
+      });
+    } catch (err) {
+      logger.warn({ err, tenantId, leadId: lead.id }, "Automation hook failed after lead creation");
+    }
 
-    // Real-time event
     emitToTenant(tenantId, "lead:created", { leadId: lead.id, leadNo: lead.lead_no });
 
     logger.info({ leadId: lead.id, leadNo: lead.lead_no, tenantId }, "Lead created");

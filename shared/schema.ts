@@ -494,7 +494,12 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
 
 export const insertLeadSchema = createInsertSchema(leads, {
   phone: z.string().min(10).max(15),
-  email: z.string().email().optional().or(z.literal("")),
+  // Accept empty string OR a valid email OR undefined — order matters
+  email: z.union([
+    z.literal(""),
+    z.string().email(),
+    z.undefined(),
+  ]).optional().transform((v) => (v === "" ? undefined : v)),
   leadScore: z.number().min(0).max(100).optional(),
 }).omit({ id: true, leadNo: true, createdAt: true, updatedAt: true });
 
