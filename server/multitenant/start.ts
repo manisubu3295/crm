@@ -11,7 +11,7 @@ import { setCommunicationRedisAvailable } from "./queues/communicationQueue.js";
 import { setFollowUpRedisAvailable } from "./queues/followUpQueue.js";
 
 async function main() {
-  logger.info({ nodeEnv: env.NODE_ENV }, "Starting Aadhirai CRM...");
+  logger.info({ nodeEnv: env.NODE_ENV }, "Starting Marcellotech CRM...");
 
   // 1. Load tenant registry
   loadRegistry();

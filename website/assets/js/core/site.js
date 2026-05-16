@@ -1,5 +1,5 @@
-/* ═══════════════════════════════════════════════════════════════════
-   AADHIRAI INNOVATIONS — site.js
+﻿/* ═══════════════════════════════════════════════════════════════════
+   MARCELLOTECH — site.js
    Shared interactivity: nav events, scroll reveal, magnetic buttons.
    Runs AFTER layout.js (which injects the nav HTML).
    ═══════════════════════════════════════════════════════════════════ */

@@ -1,5 +1,5 @@
-/* ═══════════════════════════════════════════════════════════════════
-   AADHIRAI INNOVATIONS — layout.js
+﻿/* ═══════════════════════════════════════════════════════════════════
+   MARCELLOTECH — layout.js
    Path-aware shared header/footer injection for all pages.
    Works as a plain script (no module) — load before main.js / site.js.
    ═══════════════════════════════════════════════════════════════════ */
@@ -161,9 +161,9 @@
   function renderHeader() {
     return (
       '<nav id="navbar" aria-label="Main navigation">' +
-        '<a href="' + HOME + '" class="nav-logo" aria-label="Aadhirai Innovations">' +
+        '<a href="' + HOME + '" class="nav-logo" aria-label="MARCELLOTECH">' +
           '<div class="nav-logo-mark" aria-hidden="true">AI</div>' +
-          'Aadhirai' +
+          'Marcellotech' +
         '</a>' +
         '<div class="nav-links">' + renderNavLinks() + '</div>' +
         '<div class="nav-right">' +
@@ -188,7 +188,7 @@
             '<div class="footer-brand">' +
               '<div class="nav-logo" style="margin-bottom:0.75rem">' +
                 '<div class="nav-logo-mark" aria-hidden="true">AI</div>' +
-                'Aadhirai' +
+                'Marcellotech' +
               '</div>' +
               '<p class="footer-desc">Engineering training, research publications, hardware kits and career placement for Tamil Nadu\'s students — from Trichy, since 2016.</p>' +
               '<div class="footer-social" style="margin-top:1.25rem">' +
@@ -227,12 +227,12 @@
                 '<a href="' + HOME + '#testimonial">Student Stories</a>' +
                 '<a href="' + pg('contact') + '">Contact Us</a>' +
                 '<a href="tel:+919442344796">+91 94423 44796</a>' +
-                '<a href="mailto:info@aadhiraiinnovations.com">Email Us</a>' +
+                '<a href="mailto:info@marcellotech.com">Email Us</a>' +
               '</div>' +
             '</div>' +
           '</div>' +
           '<div class="footer-bottom">' +
-            '<span>&copy; 2026 Aadhirai Innovations. All rights reserved.</span>' +
+            '<span>&copy; 2026 MARCELLOTECH. All rights reserved.</span>' +
             '<span>Made in Trichy, for Tamil Nadu\'s engineers</span>' +
           '</div>' +
         '</div>' +

@@ -59,7 +59,7 @@ async function seedAdmin(client: pg.PoolClient) {
   await client.query(
     `INSERT INTO users (username, password_hash, full_name, email, role)
      VALUES ($1, $2, $3, $4, $5)`,
-    ["admin", hash, "Super Admin", "admin@aadhirai.in", "admin"]
+    ["admin", hash, "Super Admin", "admin@marcellotech.in", "admin"]
   );
   console.log("  ✓  admin user created");
 
@@ -78,7 +78,7 @@ async function seedAdmin(client: pg.PoolClient) {
   // Insert default app settings
   await client.query(
     `INSERT INTO app_settings (institution_name, timezone) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    ["Aadhirai Institution", "Asia/Kolkata"]
+    ["Marcellotech Institution", "Asia/Kolkata"]
   );
   console.log("  ✓  app settings created");
 }
@@ -94,7 +94,7 @@ async function main() {
     console.log("\n✅ Done!\n");
     console.log("────────────────────────────────────");
     console.log("  Login at: http://localhost:5173");
-    console.log("  Institution ID : aadhirai");
+    console.log("  Institution ID : marcellotech");
     console.log("  Username       : admin");
     console.log("  Password       : Admin@1234");
     console.log("────────────────────────────────────\n");

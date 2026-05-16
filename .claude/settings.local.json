@@ -19,7 +19,16 @@
       "Bash(curl -s -X POST http://localhost:3000/api/dev/seed-test-data -H \"Content-Type: application/json\" -H \"X-Tenant: demo\" -d \"{}\")",
       "Bash(curl -s -X POST http://localhost:4000/api/dev/seed-test-data -H \"Content-Type: application/json\" -H \"X-Tenant: demo\" -d \"{}\")",
       "Bash(redis-cli -u redis://localhost:6379 ping)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(python -m http.server 8080)",
+      "Bash(curl -s http://localhost:8080)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/)",
+      "WebFetch(domain:www.marcellotech.com)",
+      "Bash(curl *)",
+      "Bash(dir \"D:/Aadhirai-web/crm/node_modules\")",
+      "Bash(findstr /i proxy)"
     ]
   }
 }

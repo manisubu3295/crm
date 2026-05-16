@@ -4,7 +4,7 @@ import {
   BarChart2, Settings, Zap, MessageSquare, RefreshCw,
   LogOut, ChevronRight, ChevronLeft, Menu,
   GraduationCap, TrendingUp, CreditCard, Building2, BookOpen,
-  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star, LayoutTemplate, Radio,
+  ClipboardCheck, FileText, Trophy, BookMarked, Briefcase, Star, LayoutTemplate, Radio, Globe,
 } from "lucide-react";
 import { cn } from "../../lib/utils.js";
 import { useAuth } from "../../lib/auth.js";
@@ -14,10 +14,11 @@ const NAV_SECTIONS = [
   {
     title: "MAIN",
     items: [
-      { href: "/",           icon: LayoutDashboard, label: "Dashboard" },
-      { href: "/leads",      icon: Users,           label: "Leads" },
-      { href: "/students",   icon: GraduationCap,   label: "Students" },
-      { href: "/followups",  icon: CheckSquare,     label: "Follow-Ups" },
+      { href: "/",             icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/leads",        icon: Users,           label: "Leads" },
+      { href: "/enquiries",    icon: Globe,           label: "Web Enquiries" },
+      { href: "/students",     icon: GraduationCap,   label: "Students" },
+      { href: "/followups",    icon: CheckSquare,     label: "Follow-Ups" },
     ],
   },
   {
@@ -84,7 +85,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
           </div>
           {!collapsed && (
             <div>
-              <p className="text-[13px] font-bold tracking-tight text-slate-900">Aadhirai CRM</p>
+              <p className="text-[13px] font-bold tracking-tight text-slate-900">Marcellotech CRM</p>
               <p className="text-[10px] font-medium tracking-wide text-slate-500">Lead Management</p>
             </div>
           )}

@@ -30,16 +30,28 @@ import { PlacementsPage }    from "./pages/Placements.js";
 import { NPSPage }           from "./pages/NPS.js";
 import { TemplatesPage }     from "./pages/Templates.js";
 import { BroadcastsPage }   from "./pages/Broadcasts.js";
+import { WebEnquiriesPage } from "./pages/WebEnquiries.js";
 
 const IS_DEV = import.meta.env.DEV;
 const ENABLE_DEV_TOOLS = import.meta.env.VITE_ENABLE_DEV_TOOLS === "true";
 
-/* Marketing website URL — in dev it's the standalone static server;
+/* Marketing website URL — in dev both apps are accessible via Express (port 3000);
    in production it's the same domain root ("/"). */
-const MARKETING_URL = IS_DEV ? "http://localhost:8080" : "/";
+const MARKETING_URL = IS_DEV ? "http://localhost:3000" : "/";
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 rounded-full border-2 border-green-600 border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Verifying session…</p>
+        </div>
+      </div>
+    );
+  }
 
   /* ── Unauthenticated: only /login is the CRM; everything else
         goes back to the marketing website. ─────────────────────── */
@@ -63,6 +75,7 @@ function AppRoutes() {
     <Switch>
       <Route path="/"             component={DashboardPage} />
       <Route path="/leads"        component={LeadsPage} />
+      <Route path="/enquiries"    component={WebEnquiriesPage} />
       <Route path="/leads/:id"    component={LeadDetailPage} />
       <Route path="/followups"    component={FollowUpsPage} />
       <Route path="/campaigns"    component={CampaignsPage} />

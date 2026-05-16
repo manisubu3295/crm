@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import type { AuthResponse } from "@shared/types.js";
 
 type AuthUser = AuthResponse["user"] & { tenantId: string };
@@ -7,11 +7,18 @@ type AuthCtx = {
   user: AuthUser | null;
   token: string | null;
   tenantId: string | null;
+  isLoading: boolean;
   login: (tenantId: string, username: string, password: string) => Promise<void>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthCtx | null>(null);
+
+function clearStorage() {
+  localStorage.removeItem("crm_token");
+  localStorage.removeItem("crm_tenant");
+  localStorage.removeItem("crm_user");
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -24,6 +31,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenantId, setTenantId] = useState<string | null>(() =>
     localStorage.getItem("crm_tenant")
   );
+  // True only during the initial mount token-validation fetch
+  const [isLoading, setIsLoading] = useState(() => {
+    return !!localStorage.getItem("crm_token");
+  });
+
+  // On mount, verify the stored token is still valid server-side
+  useEffect(() => {
+    const storedToken = localStorage.getItem("crm_token");
+    const storedTenant = localStorage.getItem("crm_tenant");
+    if (!storedToken || !storedTenant) {
+      setIsLoading(false);
+      return;
+    }
+
+    fetch("/api/auth/me", {
+      headers: {
+        Authorization: `Bearer ${storedToken}`,
+        "X-Tenant": storedTenant,
+      },
+    })
+      .then(res => {
+        if (!res.ok) {
+          clearStorage();
+          setUser(null);
+          setToken(null);
+          setTenantId(null);
+        }
+      })
+      .catch(() => {
+        // Network error — keep session, will fail naturally on next API call
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const login = useCallback(async (tid: string, username: string, password: string) => {
     const res = await fetch("/api/auth/login", {
@@ -58,16 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("crm_token");
-    localStorage.removeItem("crm_tenant");
-    localStorage.removeItem("crm_user");
+    clearStorage();
     setToken(null);
     setTenantId(null);
     setUser(null);
+    window.location.replace("/login");
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, tenantId, login, logout }}>
+    <AuthContext.Provider value={{ user, token, tenantId, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

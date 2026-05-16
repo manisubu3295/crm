@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Block CRM / app routes from indexing
+Disallow: /client/
+Disallow: /server/
+Disallow: /shared/
+Disallow: /script/
+Disallow: /assets/js/core/
+
+# Allow all website assets
+Allow: /assets/
+Allow: /pages/
+
+Sitemap: https://www.aadhiraiinnovations.com/sitemap.xml

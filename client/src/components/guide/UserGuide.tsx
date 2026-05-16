@@ -13,13 +13,13 @@ import { cn } from "../../lib/utils.js";
 const SECTIONS = [
   {
     id: "overview",
-    title: "Welcome to Aadhirai CRM",
+    title: "Welcome to Marcellotech CRM",
     icon: Star,
     color: "from-indigo-500 to-cyan-500",
     badge: "Start Here",
     badgeColor: "bg-indigo-100 text-indigo-700",
     content: {
-      summary: "Aadhirai CRM is an all-in-one lead management platform built for training institutions. It helps your team capture enquiries, nurture leads, track admissions, and analyse performance — all in one place.",
+      summary: "Marcellotech CRM is an all-in-one lead management platform built for training institutions. It helps your team capture enquiries, nurture leads, track admissions, and analyse performance — all in one place.",
       steps: [
         { icon: Phone,       title: "Capture",   text: "Leads arrive from Meta Ads, website forms, walk-ins, or Excel import. Every enquiry is automatically saved." },
         { icon: MessageSquare, title: "Nurture", text: "Counsellors follow up by call, WhatsApp, or SMS. Automation sends messages without manual effort." },
@@ -490,7 +490,7 @@ export function UserGuide({ onClose, initialSection }: UserGuideProps) {
 
           {/* Footer */}
           <div className="p-3 border-t border-gray-100">
-            <p className="text-[10px] text-gray-400 text-center">{SECTIONS.length} topics · Aadhirai CRM</p>
+            <p className="text-[10px] text-gray-400 text-center">{SECTIONS.length} topics · Marcellotech CRM</p>
           </div>
         </div>
 
@@ -693,7 +693,7 @@ export function LoginGuide({ onClose, onOpenFull }: LoginGuideProps) {
         {/* Header */}
         <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-cyan-500 px-6 py-5">
           <div>
-            <h2 className="text-lg font-bold text-white">What is Aadhirai CRM?</h2>
+            <h2 className="text-lg font-bold text-white">What is Marcellotech CRM?</h2>
             <p className="text-sm text-indigo-100 mt-0.5">An all-in-one platform to grow admissions for training institutes</p>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors">

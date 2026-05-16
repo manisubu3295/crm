@@ -1,8 +1,8 @@
 {
   "tenants": {
-    "aadhirai": {
+    "marcellotech": {
       "dbUrl": "postgresql://postgres:admin123@localhost:5432/crmdb",
-      "displayName": "Aadhirai Institution"
+      "displayName": "Marcellotech Institution"
     }
   }
 }

@@ -1,5 +1,5 @@
-/* ═══════════════════════════════════════════════════════════════════
-   AADHIRAI INNOVATIONS — main.js
+﻿/* ═══════════════════════════════════════════════════════════════════
+   MARCELLOTECH — main.js
    Apex Design System
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -1185,5 +1185,5 @@ if (enablePointerFX) {
   bar.style.filter = 'drop-shadow(0 0 4px rgba(0,113,227,0.55))';
 })();
 
-console.log('%cAadhirai Innovations', 'font-size:16px;font-weight:700;color:#0071e3;font-style:italic');
+console.log('%cMARCELLOTECH', 'font-size:16px;font-weight:700;color:#0071e3;font-style:italic');
 console.log('%cBuilt in Trichy. Trusted across Tamil Nadu.', 'color:#5A5A65');

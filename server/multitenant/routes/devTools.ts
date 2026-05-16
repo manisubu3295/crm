@@ -62,8 +62,8 @@ router.post("/seed-test-data", async (req, res) => {
     const tplSeeds = [
       { name: "Test WhatsApp Welcome",   channel: "whatsapp", trigger_event: "lead_created",        body: "Hi {{name}}, thanks for your interest in our courses! Our team will contact you shortly. Reply YES to confirm interest." },
       { name: "Test WhatsApp Follow-up", channel: "whatsapp", trigger_event: "no_response_24h",     body: "Hi {{name}}, just following up on your enquiry. Are you still interested? Reply INTERESTED to proceed." },
-      { name: "Test Email Welcome",       channel: "email",    trigger_event: "lead_created",        subject: "Welcome to Aadhirai Training", body: "Dear {{name}},\n\nThank you for your interest. We will reach out soon.\n\nBest regards,\nAadhirai Team" },
-      { name: "Test SMS Alert",           channel: "sms",      trigger_event: "no_response_48h",    body: "Hi {{name}}, this is Aadhirai Training. Reply STOP to opt out." },
+      { name: "Test Email Welcome",       channel: "email",    trigger_event: "lead_created",        subject: "Welcome to Marcellotech Training", body: "Dear {{name}},\n\nThank you for your interest. We will reach out soon.\n\nBest regards,\nMarcellotech Team" },
+      { name: "Test SMS Alert",           channel: "sms",      trigger_event: "no_response_48h",    body: "Hi {{name}}, this is Marcellotech Training. Reply STOP to opt out." },
       { name: "Test IVR Follow-up",       channel: "ivr",      trigger_event: "payment_pending_24h", body: "default" },
     ];
 

@@ -37,7 +37,7 @@ export const reportService = {
     }
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Aadhirai CRM";
+    workbook.creator = "Marcellotech CRM";
     workbook.created = new Date();
 
     if (type === "all_leads" || type === "funnel") {

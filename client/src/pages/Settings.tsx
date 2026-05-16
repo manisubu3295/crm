@@ -88,7 +88,7 @@ function GeneralSettings() {
         <CardContent className="space-y-4">
           <Field label="Institution Name">
             <Input value={val("institution_name")} onChange={(e) => set("institution_name", e.target.value)}
-              placeholder="e.g. Aadhirai Academy" />
+              placeholder="e.g. Marcellotech Academy" />
           </Field>
           <Field label="Lead Number Prefix">
             <Input value={val("lead_no_prefix")} onChange={(e) => set("lead_no_prefix", e.target.value)}
